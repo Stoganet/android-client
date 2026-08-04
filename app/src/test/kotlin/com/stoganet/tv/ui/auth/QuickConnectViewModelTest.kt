@@ -1,13 +1,13 @@
 package com.stoganet.tv.ui.auth
 
 import androidx.lifecycle.viewModelScope
-import com.stoganet.tv.api.model.QuickConnectStartResponse
-import com.stoganet.tv.api.model.TokenPair
-import com.stoganet.tv.api.model.User
-import com.stoganet.tv.data.auth.AuthRepository
-import com.stoganet.tv.data.auth.FakeDataStore
-import com.stoganet.tv.data.auth.QuickConnectPollResult
-import com.stoganet.tv.data.auth.TokenStore
+import com.stoganet.core.api.model.QuickConnectStartResponse
+import com.stoganet.core.api.model.TokenPair
+import com.stoganet.core.api.model.User
+import com.stoganet.core.data.auth.AuthRepository
+import com.stoganet.core.data.auth.FakeDataStore
+import com.stoganet.core.data.auth.QuickConnectPollResult
+import com.stoganet.core.data.auth.TokenStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

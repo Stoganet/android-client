@@ -1,7 +1,7 @@
 package com.stoganet.tv.ui.detail
 
 import androidx.compose.runtime.Immutable
-import com.stoganet.tv.api.model.MediaType
+import com.stoganet.core.api.model.MediaType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 

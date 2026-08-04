@@ -1,10 +1,10 @@
 package com.stoganet.tv.ui.library
 
-import com.stoganet.tv.api.model.LibraryItem
-import com.stoganet.tv.api.model.LibraryListResponse
-import com.stoganet.tv.api.model.MediaState
-import com.stoganet.tv.api.model.MediaType
-import com.stoganet.tv.data.library.LibraryRepository
+import com.stoganet.core.api.model.LibraryItem
+import com.stoganet.core.api.model.LibraryListResponse
+import com.stoganet.core.api.model.MediaState
+import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.data.library.LibraryRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

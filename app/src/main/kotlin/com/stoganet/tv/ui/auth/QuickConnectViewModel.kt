@@ -6,10 +6,10 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.stoganet.core.data.auth.AuthRepository
+import com.stoganet.core.data.auth.QuickConnectPollResult
+import com.stoganet.core.data.auth.TokenStore
 import com.stoganet.tv.StoganetApp
-import com.stoganet.tv.data.auth.AuthRepository
-import com.stoganet.tv.data.auth.QuickConnectPollResult
-import com.stoganet.tv.data.auth.TokenStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow

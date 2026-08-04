@@ -1,13 +1,13 @@
 package com.stoganet.tv.ui.detail
 
-import com.stoganet.tv.api.model.CastMember
-import com.stoganet.tv.api.model.Episode
-import com.stoganet.tv.api.model.LibraryDetail
-import com.stoganet.tv.api.model.MediaState
-import com.stoganet.tv.api.model.MediaType
-import com.stoganet.tv.api.model.PlayInfo
-import com.stoganet.tv.api.model.Season
-import com.stoganet.tv.data.detail.DetailRepository
+import com.stoganet.core.api.model.CastMember
+import com.stoganet.core.api.model.Episode
+import com.stoganet.core.api.model.LibraryDetail
+import com.stoganet.core.api.model.MediaState
+import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.api.model.PlayInfo
+import com.stoganet.core.api.model.Season
+import com.stoganet.core.data.detail.DetailRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

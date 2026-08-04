@@ -28,8 +28,9 @@ import androidx.tv.material3.NavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
+import com.stoganet.core.AppRoutes
+import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
-import com.stoganet.tv.api.model.MediaType
 import com.stoganet.tv.ui.detail.DetailScreen
 import com.stoganet.tv.ui.detail.DetailViewModel
 import com.stoganet.tv.ui.home.HomeScreen

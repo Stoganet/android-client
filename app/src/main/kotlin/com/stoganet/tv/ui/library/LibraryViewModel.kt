@@ -6,10 +6,10 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.stoganet.core.api.model.LibraryItem
+import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.data.library.LibraryRepository
 import com.stoganet.tv.StoganetApp
-import com.stoganet.tv.api.model.LibraryItem
-import com.stoganet.tv.api.model.MediaType
-import com.stoganet.tv.data.library.LibraryRepository
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList

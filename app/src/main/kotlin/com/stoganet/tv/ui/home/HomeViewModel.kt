@@ -6,12 +6,12 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.stoganet.core.AppRoutes
+import com.stoganet.core.api.model.HomeSection
+import com.stoganet.core.api.model.LibraryItem
+import com.stoganet.core.data.home.HomeRepository
 import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
-import com.stoganet.tv.api.model.HomeSection
-import com.stoganet.tv.api.model.LibraryItem
-import com.stoganet.tv.data.home.HomeRepository
-import com.stoganet.tv.ui.AppRoutes
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -38,8 +38,8 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
-import com.stoganet.tv.api.model.MediaType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 

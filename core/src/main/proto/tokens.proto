@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option java_package = "com.stoganet.core.proto";
+option java_multiple_files = true;
+
+message Tokens {
+    string access = 1;
+    string refresh = 2;
+    string user_id = 3;
+    string display_name = 4;
+}

@@ -5,7 +5,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
-import com.stoganet.tv.di.ServiceLocator
+import com.stoganet.core.di.ServiceLocator
 import timber.log.Timber
 
 class StoganetApp :

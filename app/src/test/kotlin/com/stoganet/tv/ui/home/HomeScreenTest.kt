@@ -15,8 +15,8 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.test.core.app.ApplicationProvider
+import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
-import com.stoganet.tv.ui.AppRoutes
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

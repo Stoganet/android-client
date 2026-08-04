@@ -11,7 +11,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
-import com.stoganet.tv.data.auth.TokenStore
+import com.stoganet.core.data.auth.TokenStore
 import com.stoganet.tv.ui.AppNavHost
 import com.stoganet.tv.ui.AuthNavHost
 import com.stoganet.tv.ui.theme.StoganetTheme

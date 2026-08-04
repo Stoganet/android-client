@@ -1,12 +1,12 @@
 package com.stoganet.tv.ui.home
 
+import com.stoganet.core.api.model.HomeResponse
+import com.stoganet.core.api.model.HomeSection
+import com.stoganet.core.api.model.LibraryItem
+import com.stoganet.core.api.model.MediaState
+import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.data.home.HomeRepository
 import com.stoganet.tv.R
-import com.stoganet.tv.api.model.HomeResponse
-import com.stoganet.tv.api.model.HomeSection
-import com.stoganet.tv.api.model.LibraryItem
-import com.stoganet.tv.api.model.MediaState
-import com.stoganet.tv.api.model.MediaType
-import com.stoganet.tv.data.home.HomeRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

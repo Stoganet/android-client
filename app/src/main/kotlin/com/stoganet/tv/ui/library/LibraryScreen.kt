@@ -32,8 +32,8 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
-import com.stoganet.tv.ui.AppRoutes
 import com.stoganet.tv.ui.home.PosterCard
 import kotlinx.collections.immutable.persistentListOf
 
