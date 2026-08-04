@@ -14,10 +14,10 @@ detekt {
     allRules = false
     source.setFrom(
         files(
-            "app/src/main/kotlin",
-            "app/src/test/kotlin",
             "core/src/main/kotlin",
             "core/src/test/kotlin",
+            "tv/src/main/kotlin",
+            "tv/src/test/kotlin",
         ),
     )
 }
