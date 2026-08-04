@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Stoganet Android Client"
 include(":core")
+include(":mobile")
 include(":tv")

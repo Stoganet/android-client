@@ -16,6 +16,7 @@ detekt {
         files(
             "core/src/main/kotlin",
             "core/src/test/kotlin",
+            "mobile/src/main/kotlin",
             "tv/src/main/kotlin",
             "tv/src/test/kotlin",
         ),
