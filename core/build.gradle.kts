@@ -11,6 +11,7 @@ android {
 
     defaultConfig {
         minSdk = 28
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     compileOptions {
@@ -42,9 +43,10 @@ android {
 
 // sourceSets["main"].kotlin.srcDirs(...) throws a ClassCastException on library modules
 // under AGP 9.3.1 (AndroidLibrarySourceSet decorator bug); the variant API works around it.
+// protobuf-gradle-plugin already wires its own per-variant generated java sources
+// automatically, so only the openapi-generator output needs manual wiring here.
 androidComponents {
     onVariants { variant ->
-        variant.sources.java?.addStaticSourceDirectory("build/generated/java/generateDebugProto/java")
         variant.sources.kotlin?.addStaticSourceDirectory("build/generated/openapi/src/main/kotlin")
     }
 }
