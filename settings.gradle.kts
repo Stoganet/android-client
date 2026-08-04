@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Stoganet TV"
+rootProject.name = "Stoganet Android Client"
 include(":app")

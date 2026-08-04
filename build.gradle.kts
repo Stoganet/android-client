@@ -11,7 +11,7 @@ detekt {
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
     buildUponDefaultConfig = true
     allRules = false
-    source.setFrom(files("app/src/main/kotlin", "app/src/test/kotlin", "app/src/main/java", "app/src/test/java"))
+    source.setFrom(files("app/src/main/kotlin", "app/src/test/kotlin"))
 }
 
 tasks.named("detekt") {
