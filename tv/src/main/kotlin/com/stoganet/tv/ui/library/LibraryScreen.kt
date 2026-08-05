@@ -1,5 +1,6 @@
 package com.stoganet.tv.ui.library
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,11 +52,18 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     when (state) {
-        LibraryUiState.Loading -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
+        LibraryUiState.Loading -> {
+            val loadingFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { loadingFocusRequester.requestFocus() }
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .focusRequester(loadingFocusRequester)
+                    .focusable(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         LibraryUiState.Error -> {

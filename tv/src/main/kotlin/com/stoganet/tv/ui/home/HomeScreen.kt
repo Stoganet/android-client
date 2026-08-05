@@ -1,5 +1,6 @@
 package com.stoganet.tv.ui.home
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,8 +48,18 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     when (state) {
-        HomeUiState.Loading -> Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        HomeUiState.Loading -> {
+            val loadingFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { loadingFocusRequester.requestFocus() }
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .focusRequester(loadingFocusRequester)
+                    .focusable(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         HomeUiState.Error -> {

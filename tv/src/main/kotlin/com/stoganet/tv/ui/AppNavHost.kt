@@ -1,5 +1,6 @@
 package com.stoganet.tv.ui
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
@@ -8,6 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -157,35 +161,52 @@ private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, naviga
     val moviesDesc = stringResource(R.string.nav_item_selected_description, moviesLabel)
     val tvDesc = stringResource(R.string.nav_item_selected_description, tvLabel)
 
+    val homeFocusRequester = remember { FocusRequester() }
+    val moviesFocusRequester = remember { FocusRequester() }
+    val tvFocusRequester = remember { FocusRequester() }
+    val selectedFocusRequester = when (currentRoute) {
+        AppRoutes.LIBRARY_MOVIES -> moviesFocusRequester
+        AppRoutes.LIBRARY_TV -> tvFocusRequester
+        else -> homeFocusRequester
+    }
+
     Column(
         modifier = Modifier
             .fillMaxHeight()
             .padding(12.dp)
-            .selectableGroup(),
+            .selectableGroup()
+            .focusRestorer(fallback = selectedFocusRequester)
+            .focusGroup(),
     ) {
         NavigationDrawerItem(
             selected = currentRoute == AppRoutes.HOME,
             onClick = { navigateTo(AppRoutes.HOME) },
             leadingContent = { Icon(painterResource(R.drawable.ic_home), contentDescription = null) },
-            modifier = Modifier.semantics {
-                contentDescription = if (currentRoute == AppRoutes.HOME) homeDesc else homeLabel
-            },
+            modifier = Modifier
+                .focusRequester(homeFocusRequester)
+                .semantics {
+                    contentDescription = if (currentRoute == AppRoutes.HOME) homeDesc else homeLabel
+                },
         ) { Text(homeLabel) }
         NavigationDrawerItem(
             selected = currentRoute == AppRoutes.LIBRARY_MOVIES,
             onClick = { navigateTo(AppRoutes.LIBRARY_MOVIES) },
             leadingContent = { Icon(painterResource(R.drawable.ic_movie), contentDescription = null) },
-            modifier = Modifier.semantics {
-                contentDescription = if (currentRoute == AppRoutes.LIBRARY_MOVIES) moviesDesc else moviesLabel
-            },
+            modifier = Modifier
+                .focusRequester(moviesFocusRequester)
+                .semantics {
+                    contentDescription = if (currentRoute == AppRoutes.LIBRARY_MOVIES) moviesDesc else moviesLabel
+                },
         ) { Text(moviesLabel) }
         NavigationDrawerItem(
             selected = currentRoute == AppRoutes.LIBRARY_TV,
             onClick = { navigateTo(AppRoutes.LIBRARY_TV) },
             leadingContent = { Icon(painterResource(R.drawable.ic_tv), contentDescription = null) },
-            modifier = Modifier.semantics {
-                contentDescription = if (currentRoute == AppRoutes.LIBRARY_TV) tvDesc else tvLabel
-            },
+            modifier = Modifier
+                .focusRequester(tvFocusRequester)
+                .semantics {
+                    contentDescription = if (currentRoute == AppRoutes.LIBRARY_TV) tvDesc else tvLabel
+                },
         ) { Text(tvLabel) }
     }
 }
