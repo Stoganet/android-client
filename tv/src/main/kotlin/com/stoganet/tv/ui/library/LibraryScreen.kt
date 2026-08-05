@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
@@ -39,6 +38,7 @@ import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
 import com.stoganet.tv.ui.home.PosterCard
+import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
 private const val GRID_COLUMNS = 6
@@ -53,8 +53,7 @@ fun LibraryScreen(
 ) {
     when (state) {
         LibraryUiState.Loading -> {
-            val loadingFocusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { loadingFocusRequester.requestFocus() }
+            val loadingFocusRequester = rememberInitialFocusRequester(enabled = true)
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -106,7 +105,7 @@ private fun LibraryGrid(
 ) {
     val currentOnIntent by rememberUpdatedState(onIntent)
     val gridState = rememberLazyGridState()
-    val firstItemFocusRequester = remember { FocusRequester() }
+    val firstItemFocusRequester = rememberInitialFocusRequester(enabled = state.items.isNotEmpty())
     val shouldLoadMore by remember(state.items.size) {
         derivedStateOf {
             val info = gridState.layoutInfo.visibleItemsInfo
@@ -117,7 +116,6 @@ private fun LibraryGrid(
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) currentOnIntent(LibraryIntent.LoadMore)
     }
-    LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
     LazyVerticalGrid(
         columns = GridCells.Fixed(GRID_COLUMNS),
         state = gridState,

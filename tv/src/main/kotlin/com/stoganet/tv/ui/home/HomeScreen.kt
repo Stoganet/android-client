@@ -16,8 +16,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,6 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
+import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
 private const val SEE_MORE_ASPECT_RATIO = 2f / 3f
@@ -49,8 +48,7 @@ fun HomeScreen(
 ) {
     when (state) {
         HomeUiState.Loading -> {
-            val loadingFocusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { loadingFocusRequester.requestFocus() }
+            val loadingFocusRequester = rememberInitialFocusRequester(enabled = true)
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -85,8 +83,8 @@ fun HomeScreen(
         }
 
         is HomeUiState.Content -> {
-            val firstItemFocusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
+            val firstSectionHasItems = state.sections.firstOrNull()?.items?.isNotEmpty() == true
+            val firstItemFocusRequester = rememberInitialFocusRequester(enabled = firstSectionHasItems)
             LazyColumn(
                 modifier = modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 32.dp),
