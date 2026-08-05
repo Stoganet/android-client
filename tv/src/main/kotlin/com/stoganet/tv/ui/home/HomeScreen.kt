@@ -12,11 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -69,16 +74,19 @@ fun HomeScreen(
         }
 
         is HomeUiState.Content -> {
+            val firstItemFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
             LazyColumn(
                 modifier = modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                items(state.sections, key = { it.id }) { section ->
+                itemsIndexed(state.sections, key = { _, section -> section.id }) { index, section ->
                     SectionRow(
                         section = section,
                         onSeeMore = section.seeMoreRoute?.let { route -> { onNavigateTo(route) } },
                         onNavigateToDetail = { id -> onNavigateTo(AppRoutes.detail(id)) },
+                        firstItemFocusRequester = if (index == 0) firstItemFocusRequester else null,
                     )
                 }
             }
@@ -92,6 +100,7 @@ private fun SectionRow(
     section: HomeSectionUiState,
     onSeeMore: (() -> Unit)?,
     onNavigateToDetail: (id: String) -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
         Text(
@@ -103,12 +112,22 @@ private fun SectionRow(
         LazyRow(
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = if (firstItemFocusRequester != null) {
+                Modifier.focusRestorer(fallback = firstItemFocusRequester)
+            } else {
+                Modifier
+            },
         ) {
-            items(section.items, key = { it.id }) { item ->
+            itemsIndexed(section.items, key = { _, item -> item.id }) { index, item ->
                 PosterCard(
                     posterUrl = item.posterUrl,
                     contentDescription = item.contentDescription,
                     onClick = { onNavigateToDetail(item.id) },
+                    modifier = if (index == 0 && firstItemFocusRequester != null) {
+                        Modifier.focusRequester(firstItemFocusRequester)
+                    } else {
+                        Modifier
+                    },
                 )
             }
             if (onSeeMore != null) {

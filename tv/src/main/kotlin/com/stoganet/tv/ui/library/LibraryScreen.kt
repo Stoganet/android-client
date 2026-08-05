@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -23,6 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -95,6 +98,7 @@ private fun LibraryGrid(
 ) {
     val currentOnIntent by rememberUpdatedState(onIntent)
     val gridState = rememberLazyGridState()
+    val firstItemFocusRequester = remember { FocusRequester() }
     val shouldLoadMore by remember(state.items.size) {
         derivedStateOf {
             val info = gridState.layoutInfo.visibleItemsInfo
@@ -105,19 +109,21 @@ private fun LibraryGrid(
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) currentOnIntent(LibraryIntent.LoadMore)
     }
+    LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
     LazyVerticalGrid(
         columns = GridCells.Fixed(GRID_COLUMNS),
         state = gridState,
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().focusRestorer(fallback = firstItemFocusRequester),
     ) {
-        items(state.items, key = { it.id }) { item ->
+        itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
             PosterCard(
                 posterUrl = item.posterUrl,
                 contentDescription = item.contentDescription,
                 onClick = { onNavigateTo(AppRoutes.detail(item.id)) },
+                modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier,
             )
         }
         if (state.isLoadingMore) {
