@@ -11,12 +11,14 @@ import com.stoganet.core.api.model.QuickConnectPollRequest
 import com.stoganet.core.api.model.QuickConnectStartResponse
 import com.stoganet.core.api.model.RefreshRequest
 import com.stoganet.core.api.model.TokenPair
+import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.auth.QuickConnectPollResult
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -94,5 +96,13 @@ class StoganetApi(private val client: HttpClient, private val baseUrl: String = 
         val response = client.get("${baseUrl}library/$id/seasons/$seasonNumber/episodes")
         check(response.status.isSuccess()) { "getEpisodes failed: ${response.status.value}" }
         return response.body<EpisodeListResponse>().episodes
+    }
+
+    suspend fun reportProgress(itemId: String, positionMs: Long, played: Boolean) {
+        val response = client.put("${baseUrl}playback/$itemId/progress") {
+            contentType(ContentType.Application.Json)
+            setBody(WatchProgress(positionMs = positionMs, played = played))
+        }
+        check(response.status.isSuccess()) { "reportProgress failed: ${response.status.value}" }
     }
 }
