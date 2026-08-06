@@ -26,22 +26,25 @@ import com.stoganet.tv.R
 fun QuickConnectScreen(
     state: QuickConnectUiState,
     onIntent: (QuickConnectIntent) -> Unit,
+    onSwitchToPassword: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (state.status) {
             QuickConnectUiState.Status.Loading -> CircularProgressIndicator()
 
-            QuickConnectUiState.Status.WaitingForApproval -> WaitingContent(state.code)
+            QuickConnectUiState.Status.WaitingForApproval -> WaitingContent(state.code, onSwitchToPassword)
 
             QuickConnectUiState.Status.Expired -> RetryContent(
                 message = stringResource(R.string.login_quick_connect_expired),
                 onRetry = { onIntent(QuickConnectIntent.Retry) },
+                onSwitchToPassword = onSwitchToPassword,
             )
 
             QuickConnectUiState.Status.Error -> RetryContent(
                 message = stringResource(R.string.error_cant_reach_server),
                 onRetry = { onIntent(QuickConnectIntent.Retry) },
+                onSwitchToPassword = onSwitchToPassword,
             )
         }
     }
@@ -49,7 +52,7 @@ fun QuickConnectScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun WaitingContent(code: String) {
+private fun WaitingContent(code: String, onSwitchToPassword: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(text = stringResource(R.string.login_quick_connect_title), style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
@@ -61,12 +64,14 @@ private fun WaitingContent(code: String) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = stringResource(R.string.login_quick_connect_waiting), style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        SwitchToPasswordLink(onSwitchToPassword)
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun RetryContent(message: String, onRetry: () -> Unit) {
+private fun RetryContent(message: String, onRetry: () -> Unit, onSwitchToPassword: () -> Unit) {
     val retryLabel = stringResource(R.string.action_retry)
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(text = message, style = MaterialTheme.typography.headlineMedium)
@@ -77,13 +82,27 @@ private fun RetryContent(message: String, onRetry: () -> Unit) {
         ) {
             Text(text = retryLabel)
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        SwitchToPasswordLink(onSwitchToPassword)
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SwitchToPasswordLink(onSwitchToPassword: () -> Unit) {
+    val label = stringResource(R.string.login_switch_to_password)
+    Button(
+        onClick = onSwitchToPassword,
+        modifier = Modifier.semantics { contentDescription = label },
+    ) {
+        Text(text = label)
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun PreviewLoading() {
-    QuickConnectScreen(state = QuickConnectUiState(), onIntent = {})
+    QuickConnectScreen(state = QuickConnectUiState(), onIntent = {}, onSwitchToPassword = {})
 }
 
 @Preview(showBackground = true)
@@ -92,6 +111,7 @@ private fun PreviewWaiting() {
     QuickConnectScreen(
         state = QuickConnectUiState(code = "ABC123", status = QuickConnectUiState.Status.WaitingForApproval),
         onIntent = {},
+        onSwitchToPassword = {},
     )
 }
 
@@ -101,6 +121,7 @@ private fun PreviewExpired() {
     QuickConnectScreen(
         state = QuickConnectUiState(status = QuickConnectUiState.Status.Expired),
         onIntent = {},
+        onSwitchToPassword = {},
     )
 }
 
@@ -110,5 +131,6 @@ private fun PreviewError() {
     QuickConnectScreen(
         state = QuickConnectUiState(status = QuickConnectUiState.Status.Error),
         onIntent = {},
+        onSwitchToPassword = {},
     )
 }

@@ -28,6 +28,26 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `login returns success wrapping LoginResult`() = runTest {
+        val tokens = TokenPair(accessToken = "at", refreshToken = "rt", user = fakeUser)
+        coEvery { api.login("user", "pass", "model") } returns LoginResult.Success(tokens)
+
+        val result = repository.login("user", "pass", "model")
+
+        assertTrue(result.isSuccess)
+        assertEquals(LoginResult.Success(tokens), result.getOrThrow())
+    }
+
+    @Test
+    fun `login returns failure when api throws`() = runTest {
+        coEvery { api.login("user", "pass", null) } throws IllegalStateException("boom")
+
+        val result = repository.login("user", "pass", null)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `startQuickConnect returns success with code and pollToken`() = runTest {
         coEvery { api.startQuickConnect() } returns QuickConnectStartResponse(code = "ABC123", pollToken = "tok-xyz")
 

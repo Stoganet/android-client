@@ -10,8 +10,8 @@ import com.stoganet.core.api.model.MediaType
 import com.stoganet.core.api.model.QuickConnectPollRequest
 import com.stoganet.core.api.model.QuickConnectStartResponse
 import com.stoganet.core.api.model.RefreshRequest
-import com.stoganet.core.api.model.TokenPair
 import com.stoganet.core.api.model.WatchProgress
+import com.stoganet.core.data.auth.LoginResult
 import com.stoganet.core.data.auth.QuickConnectPollResult
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -24,16 +24,24 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import java.io.IOException
 
 class StoganetApi(private val client: HttpClient, private val baseUrl: String = BASE_URL) {
 
-    suspend fun login(username: String, password: String, deviceLabel: String?): TokenPair {
-        val response = client.post("${baseUrl}auth/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(username = username, password = password, deviceLabel = deviceLabel))
+    suspend fun login(username: String, password: String, deviceLabel: String?): LoginResult {
+        val response = try {
+            client.post("${baseUrl}auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody(LoginRequest(username = username, password = password, deviceLabel = deviceLabel))
+            }
+        } catch (_: IOException) {
+            return LoginResult.NetworkError
         }
-        check(response.status.isSuccess()) { "login failed: ${response.status.value}" }
-        return response.body()
+        return when (response.status) {
+            HttpStatusCode.OK -> LoginResult.Success(response.body())
+            HttpStatusCode.Unauthorized, HttpStatusCode.Locked -> LoginResult.InvalidCredentials
+            else -> LoginResult.NetworkError
+        }
     }
 
     suspend fun startQuickConnect(): QuickConnectStartResponse {

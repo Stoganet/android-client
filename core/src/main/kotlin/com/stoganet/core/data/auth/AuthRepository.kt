@@ -5,6 +5,10 @@ import com.stoganet.core.data.net.StoganetApi
 
 class AuthRepository(private val api: StoganetApi, private val tokenStore: TokenStore) {
 
+    suspend fun login(username: String, password: String, deviceLabel: String?): Result<LoginResult> = runCatching {
+        api.login(username, password, deviceLabel)
+    }
+
     suspend fun startQuickConnect(): Result<QuickConnectStartResponse> = runCatching {
         api.startQuickConnect()
     }

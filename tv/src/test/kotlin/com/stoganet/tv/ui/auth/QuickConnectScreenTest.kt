@@ -31,7 +31,7 @@ class QuickConnectScreenTest {
 
     @Test
     fun loadingState_showsProgressIndicator() = runComposeUiTest {
-        setContent { QuickConnectScreen(state = QuickConnectUiState(), onIntent = {}) }
+        setContent { QuickConnectScreen(state = QuickConnectUiState(), onIntent = {}, onSwitchToPassword = {}) }
 
         onNode(
             SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate),
@@ -46,6 +46,7 @@ class QuickConnectScreenTest {
             QuickConnectScreen(
                 state = QuickConnectUiState(code = "ABC123", status = QuickConnectUiState.Status.WaitingForApproval),
                 onIntent = {},
+                onSwitchToPassword = {},
             )
         }
 
@@ -59,6 +60,7 @@ class QuickConnectScreenTest {
             QuickConnectScreen(
                 state = QuickConnectUiState(status = QuickConnectUiState.Status.Expired),
                 onIntent = {},
+                onSwitchToPassword = {},
             )
         }
 
@@ -72,6 +74,7 @@ class QuickConnectScreenTest {
             QuickConnectScreen(
                 state = QuickConnectUiState(status = QuickConnectUiState.Status.Error),
                 onIntent = {},
+                onSwitchToPassword = {},
             )
         }
 
@@ -86,6 +89,7 @@ class QuickConnectScreenTest {
             QuickConnectScreen(
                 state = QuickConnectUiState(status = QuickConnectUiState.Status.Expired),
                 onIntent = { if (it == QuickConnectIntent.Retry) intentFired = true },
+                onSwitchToPassword = {},
             )
         }
 

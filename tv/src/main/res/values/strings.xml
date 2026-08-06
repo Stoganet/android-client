@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Stoganet TV</string>
 
+    <string name="login_title">Sign in to Stoganet</string>
     <string name="login_quick_connect_title">Sign in with Quick Connect</string>
     <string name="login_quick_connect_instruction">Open jellyfin.stoganet.com → Quick Connect and enter this code:</string>
     <string name="login_quick_connect_waiting">Waiting for approval…</string>
@@ -10,6 +11,7 @@
     <string name="login_username_hint">Username</string>
     <string name="login_password_hint">Password</string>
     <string name="login_submit">Sign in</string>
+    <string name="login_error_credentials">Incorrect username or password</string>
 
     <string name="library_logout">Sign out</string>
     <string name="library_empty">No content found</string>

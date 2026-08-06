@@ -1,6 +1,7 @@
 package com.stoganet.core.data.net
 
 import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.data.auth.LoginResult
 import com.stoganet.core.data.auth.QuickConnectPollResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -34,22 +35,46 @@ class StoganetApiTest {
         """{"access_token":"$access","refresh_token":"$refresh","user":{"id":"u1","email":"a@b.com","display_name":"Test"}}"""
 
     @Test
-    fun `login returns TokenPair on 200`() = runTest {
+    fun `login returns Success with TokenPair on 200`() = runTest {
         val engine = MockEngine { respond(tokenPairJson(), HttpStatusCode.OK, jsonHeader) }
         val api = buildApi(engine)
 
         val result = api.login("user", "pass", null)
 
-        assertEquals("at", result.accessToken)
-        assertEquals("rt", result.refreshToken)
+        assertInstanceOf(LoginResult.Success::class.java, result)
+        assertEquals("at", (result as LoginResult.Success).tokens.accessToken)
     }
 
     @Test
-    fun `login throws on non-success status`() = runTest {
+    fun `login returns InvalidCredentials on 401`() = runTest {
         val engine = MockEngine { respond("", HttpStatusCode.Unauthorized) }
         val api = buildApi(engine)
 
-        assertThrows<IllegalStateException> { api.login("user", "pass", null) }
+        assertEquals(LoginResult.InvalidCredentials, api.login("user", "pass", null))
+    }
+
+    @Test
+    fun `login returns InvalidCredentials on 423 locked`() = runTest {
+        val engine = MockEngine { respond("", HttpStatusCode.Locked) }
+        val api = buildApi(engine)
+
+        assertEquals(LoginResult.InvalidCredentials, api.login("user", "pass", null))
+    }
+
+    @Test
+    fun `login returns NetworkError on 503`() = runTest {
+        val engine = MockEngine { respond("", HttpStatusCode.ServiceUnavailable) }
+        val api = buildApi(engine)
+
+        assertEquals(LoginResult.NetworkError, api.login("user", "pass", null))
+    }
+
+    @Test
+    fun `login returns NetworkError on IOException`() = runTest {
+        val engine = MockEngine { throw java.io.IOException("connect failed") }
+        val api = buildApi(engine)
+
+        assertEquals(LoginResult.NetworkError, api.login("user", "pass", null))
     }
 
     @Test
