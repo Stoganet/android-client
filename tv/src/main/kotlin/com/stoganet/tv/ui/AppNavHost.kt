@@ -41,6 +41,7 @@ import com.stoganet.tv.ui.home.HomeScreen
 import com.stoganet.tv.ui.home.HomeViewModel
 import com.stoganet.tv.ui.library.LibraryScreen
 import com.stoganet.tv.ui.library.LibraryViewModel
+import com.stoganet.tv.ui.player.PlayerIntent
 import com.stoganet.tv.ui.player.PlayerScreen
 import com.stoganet.tv.ui.player.PlayerViewModel
 
@@ -131,7 +132,7 @@ fun AppNavHost() {
             PlayerScreen(
                 state = state,
                 onBack = {
-                    vm.player.stop()
+                    vm.onIntent(PlayerIntent.Exit)
                     navController.popBackStack()
                 },
                 player = vm.player,
