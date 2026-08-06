@@ -95,6 +95,7 @@ class PlayerViewModel(
         if (url != null) {
             player.setMediaItem(MediaItem.fromUri(url), positionMs)
             player.prepare()
+            player.play()
             _state.update { PlayerUiState.Ready }
             return
         }
@@ -109,6 +110,7 @@ class PlayerViewModel(
                     currentStreamUrl = play.streamUrl
                     player.setMediaItem(MediaItem.fromUri(play.streamUrl), positionMs)
                     player.prepare()
+                    player.play()
                     _state.update { PlayerUiState.Ready }
                 }
                 .onFailure { _state.update { PlayerUiState.Error } }

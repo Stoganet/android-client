@@ -106,6 +106,7 @@ class PlayerViewModelTest {
         assertTrue(vm.state.value is PlayerUiState.Ready)
         verify { player.setMediaItem(any<MediaItem>(), any<Long>()) }
         verify { player.prepare() }
+        verify { player.play() }
     }
 
     @Test
