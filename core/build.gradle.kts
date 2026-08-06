@@ -29,6 +29,7 @@ android {
 
     testOptions {
         unitTests {
+            isReturnDefaultValues = true
             all {
                 it.useJUnitPlatform()
                 it.jvmArgs("-Xmx1g")

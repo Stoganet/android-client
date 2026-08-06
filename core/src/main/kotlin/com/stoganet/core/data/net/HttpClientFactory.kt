@@ -1,5 +1,6 @@
 package com.stoganet.core.data.net
 
+import android.util.Log
 import com.stoganet.core.BuildConfig
 import com.stoganet.core.api.model.RefreshRequest
 import com.stoganet.core.api.model.TokenPair
@@ -25,6 +26,7 @@ import java.util.concurrent.TimeUnit
 
 const val BASE_URL = "https://api.stoganet.com/"
 
+private const val TAG = "HttpClientFactory"
 private const val CONNECT_TIMEOUT_SECONDS = 10L
 private const val READ_TIMEOUT_SECONDS = 15L
 private const val WRITE_TIMEOUT_SECONDS = 15L
@@ -67,6 +69,7 @@ internal fun HttpClientConfig<*>.configurePlugins(tokenStore: TokenStore, baseUr
                     markAsRefreshTokenRequest()
                 }
                 if (!response.status.isSuccess()) {
+                    Log.w(TAG, "token refresh failed: ${response.status.value}")
                     tokenStore.clear()
                     return@refreshTokens null
                 }

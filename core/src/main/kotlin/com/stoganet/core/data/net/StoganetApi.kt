@@ -1,5 +1,6 @@
 package com.stoganet.core.data.net
 
+import android.util.Log
 import com.stoganet.core.api.model.Episode
 import com.stoganet.core.api.model.EpisodeListResponse
 import com.stoganet.core.api.model.HomeResponse
@@ -26,6 +27,8 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import java.io.IOException
 
+private const val TAG = "StoganetApi"
+
 class StoganetApi(private val client: HttpClient, private val baseUrl: String = BASE_URL) {
 
     suspend fun login(username: String, password: String, deviceLabel: String?): LoginResult {
@@ -34,7 +37,8 @@ class StoganetApi(private val client: HttpClient, private val baseUrl: String = 
                 contentType(ContentType.Application.Json)
                 setBody(LoginRequest(username = username, password = password, deviceLabel = deviceLabel))
             }
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            Log.w(TAG, e.message, e)
             return LoginResult.NetworkError
         }
         return when (response.status) {
