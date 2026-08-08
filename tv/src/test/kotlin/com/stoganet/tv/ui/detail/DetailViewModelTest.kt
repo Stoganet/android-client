@@ -228,7 +228,7 @@ class DetailViewModelTest {
     }
 
     @Test
-    fun `RequestMovie failure leaves mediaState unchanged`() = runTest {
+    fun `RequestMovie failure reverts mediaState back to REQUESTABLE`() = runTest {
         val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
         coEvery { repository.getDetail(any()) } returns Result.success(detail)
         coEvery { searchRepository.requestMovie("id1") } returns Result.failure(RuntimeException("fail"))
@@ -238,5 +238,35 @@ class DetailViewModelTest {
 
         val state = vm.state.value as DetailUiState.Content
         assertEquals(MediaState.REQUESTABLE, state.mediaState)
+    }
+
+    @Test
+    fun `RequestMovie flips mediaState to DOWNLOADING before the network call resolves`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        val deferred = CompletableDeferred<Result<Unit>>()
+        coEvery { searchRepository.requestMovie("id1") } coAnswers { deferred.await() }
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.DOWNLOADING, state.mediaState)
+        deferred.complete(Result.success(Unit))
+    }
+
+    @Test
+    fun `second RequestMovie tap while already DOWNLOADING does not fire another request`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        val deferred = CompletableDeferred<Result<Unit>>()
+        coEvery { searchRepository.requestMovie("id1") } coAnswers { deferred.await() }
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+        vm.onIntent(DetailIntent.RequestMovie)
+        deferred.complete(Result.success(Unit))
+
+        coVerify(exactly = 1) { searchRepository.requestMovie("id1") }
     }
 }

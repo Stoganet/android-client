@@ -49,13 +49,16 @@ class DetailViewModel(
     }
 
     private fun requestMovie() {
+        val current = _state.value
+        if (current !is DetailUiState.Content || current.mediaState != MediaState.REQUESTABLE) return
+        _state.update { (it as DetailUiState.Content).copy(mediaState = MediaState.DOWNLOADING) }
         viewModelScope.launch {
-            searchRepository.requestMovie(id).onSuccess {
-                _state.update { current ->
-                    if (current is DetailUiState.Content) {
-                        current.copy(mediaState = MediaState.DOWNLOADING)
+            searchRepository.requestMovie(id).onFailure {
+                _state.update { state ->
+                    if (state is DetailUiState.Content) {
+                        state.copy(mediaState = MediaState.REQUESTABLE)
                     } else {
-                        current
+                        state
                     }
                 }
             }
