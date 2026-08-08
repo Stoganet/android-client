@@ -52,6 +52,13 @@
     <string name="search_error_message">Couldn\'t search. Please try again.</string>
     <string name="player_error_message">Couldn\'t start playback.</string>
     <string name="player_back_content_description">Back</string>
+    <string name="player_play_content_description">Play</string>
+    <string name="player_pause_content_description">Pause</string>
+    <string name="player_rewind_content_description">Rewind 10 seconds</string>
+    <string name="player_forward_content_description">Forward 10 seconds</string>
+    <string name="player_subtitles_content_description">Subtitles</string>
+    <string name="player_subtitles_off">Off</string>
+    <string name="player_subtitles_menu_content_description">Subtitle track list</string>
     <plurals name="detail_seasons_label">
         <item quantity="one">%d Season</item>
         <item quantity="other">%d Seasons</item>

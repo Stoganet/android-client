@@ -41,8 +41,7 @@ class SubtitlePreferenceStore(private val dataStore: DataStore<SubtitlePreferenc
 private object SubtitlePreferenceSerializer : Serializer<SubtitlePreference> {
     override val defaultValue: SubtitlePreference = SubtitlePreference.getDefaultInstance()
 
-    override suspend fun readFrom(input: InputStream): SubtitlePreference =
-        SubtitlePreference.parseFrom(input)
+    override suspend fun readFrom(input: InputStream): SubtitlePreference = SubtitlePreference.parseFrom(input)
 
     override suspend fun writeTo(t: SubtitlePreference, output: OutputStream) {
         t.writeTo(output)

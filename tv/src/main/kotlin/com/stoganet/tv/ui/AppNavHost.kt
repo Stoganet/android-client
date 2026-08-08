@@ -163,6 +163,7 @@ fun AppNavHost() {
                     navController.popBackStack()
                 },
                 player = vm.player,
+                onIntent = vm::onIntent,
             )
         }
     }
