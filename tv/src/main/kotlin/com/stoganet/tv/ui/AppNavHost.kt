@@ -1,17 +1,21 @@
 package com.stoganet.tv.ui
 
+import android.annotation.SuppressLint
+import android.widget.Toast
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -35,6 +39,7 @@ import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
+import com.stoganet.tv.StoganetApp
 import com.stoganet.tv.ui.detail.DetailScreen
 import com.stoganet.tv.ui.detail.DetailViewModel
 import com.stoganet.tv.ui.home.HomeScreen
@@ -47,6 +52,7 @@ import com.stoganet.tv.ui.player.PlayerViewModel
 import com.stoganet.tv.ui.search.SearchScreen
 import com.stoganet.tv.ui.search.SearchViewModel
 
+@SuppressLint("LocalContextGetResourceValueCall")
 @Suppress("LongMethod")
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -54,6 +60,14 @@ fun AppNavHost() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        val app = context.applicationContext as StoganetApp
+        app.services.userMessageCenter.messages.collect { messageResId ->
+            Toast.makeText(context, context.getString(messageResId), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val navigateTo: (String) -> Unit = remember(navController) {
         { route ->

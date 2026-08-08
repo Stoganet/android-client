@@ -13,6 +13,8 @@ import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.search.SearchRepository
+import com.stoganet.core.util.UserMessageCenter
+import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -26,6 +28,7 @@ class DetailViewModel(
     private val id: String,
     private val repository: DetailRepository,
     private val searchRepository: SearchRepository,
+    private val userMessageCenter: UserMessageCenter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
@@ -61,6 +64,7 @@ class DetailViewModel(
                         state
                     }
                 }
+                userMessageCenter.show(R.string.detail_request_failed_message)
             }
         }
     }
@@ -138,6 +142,7 @@ class DetailViewModel(
                     id = id,
                     repository = app.services.detailRepository,
                     searchRepository = app.services.searchRepository,
+                    userMessageCenter = app.services.userMessageCenter,
                 )
             }
         }

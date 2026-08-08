@@ -9,9 +9,12 @@ import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.search.SearchRepository
+import com.stoganet.core.util.UserMessageCenter
+import com.stoganet.tv.R
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,9 +37,14 @@ class DetailViewModelTest {
 
     private val repository = mockk<DetailRepository>()
     private val searchRepository = mockk<SearchRepository>()
+    private val userMessageCenter = mockk<UserMessageCenter>(relaxed = true)
 
-    private fun newVm(id: String = "id1") =
-        DetailViewModel(id = id, repository = repository, searchRepository = searchRepository)
+    private fun newVm(id: String = "id1") = DetailViewModel(
+        id = id,
+        repository = repository,
+        searchRepository = searchRepository,
+        userMessageCenter = userMessageCenter,
+    )
 
     @BeforeEach fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -228,6 +236,18 @@ class DetailViewModelTest {
     }
 
     @Test
+    fun `RequestMovie success does not show a failure message`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        coEvery { searchRepository.requestMovie("id1") } returns Result.success(Unit)
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+
+        verify(exactly = 0) { userMessageCenter.show(any()) }
+    }
+
+    @Test
     fun `RequestMovie failure reverts mediaState back to REQUESTABLE`() = runTest {
         val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
         coEvery { repository.getDetail(any()) } returns Result.success(detail)
@@ -238,6 +258,18 @@ class DetailViewModelTest {
 
         val state = vm.state.value as DetailUiState.Content
         assertEquals(MediaState.REQUESTABLE, state.mediaState)
+    }
+
+    @Test
+    fun `RequestMovie failure shows a failure message`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        coEvery { searchRepository.requestMovie("id1") } returns Result.failure(RuntimeException("fail"))
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+
+        verify(exactly = 1) { userMessageCenter.show(R.string.detail_request_failed_message) }
     }
 
     @Test
