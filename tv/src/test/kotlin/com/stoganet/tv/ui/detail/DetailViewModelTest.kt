@@ -8,6 +8,7 @@ import com.stoganet.core.api.model.MediaType
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.search.SearchRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -32,6 +33,10 @@ import org.junit.jupiter.api.Test
 class DetailViewModelTest {
 
     private val repository = mockk<DetailRepository>()
+    private val searchRepository = mockk<SearchRepository>()
+
+    private fun newVm(id: String = "id1") =
+        DetailViewModel(id = id, repository = repository, searchRepository = searchRepository)
 
     @BeforeEach fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -44,7 +49,7 @@ class DetailViewModelTest {
     private fun fakeDetail(play: PlayInfo? = PlayInfo(streamUrl = "https://api.stoganet.com/stream/jf-uuid")) =
         LibraryDetail(
             id = "tmdb:movie:603",
-            title = "The Matrix",
+            title = "Test Movie",
             year = 1999,
             type = MediaType.MOVIE,
             poster = "https://img/poster",
@@ -53,7 +58,7 @@ class DetailViewModelTest {
             state = if (play != null) MediaState.PLAYABLE else MediaState.DOWNLOADING,
             genres = listOf("Action", "Sci-Fi"),
             runtime = 136,
-            cast = listOf(CastMember(name = "Keanu Reeves", role = "Actor")),
+            cast = listOf(CastMember(name = "Test Actor", role = "Actor")),
             seasons = emptyList(),
             play = play,
         )
@@ -61,18 +66,18 @@ class DetailViewModelTest {
     @Test
     fun `loads Content on success`() = runTest {
         coEvery { repository.getDetail("id1") } returns Result.success(fakeDetail())
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
 
         val state = vm.state.value
         assertInstanceOf(DetailUiState.Content::class.java, state)
         state as DetailUiState.Content
-        assertEquals("The Matrix", state.title)
+        assertEquals("Test Movie", state.title)
         assertEquals(1999, state.year)
         assertEquals("https://img/backdrop", state.backdropUrl)
         assertEquals(listOf("Action", "Sci-Fi"), state.genres.toList())
         assertEquals("2h 16m", state.runtime)
         assertEquals(1, state.cast.size)
-        assertEquals("Keanu Reeves", state.cast[0].name)
+        assertEquals("Test Actor", state.cast[0].name)
         assertTrue(state.isPlayable)
         assertEquals("https://api.stoganet.com/stream/jf-uuid", state.streamUrl)
     }
@@ -80,7 +85,7 @@ class DetailViewModelTest {
     @Test
     fun `shows Error on failure`() = runTest {
         coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("fail"))
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
 
         assertInstanceOf(DetailUiState.Error::class.java, vm.state.value)
     }
@@ -88,7 +93,7 @@ class DetailViewModelTest {
     @Test
     fun `Retry reloads from scratch`() = runTest {
         coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("fail"))
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
 
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
         vm.onIntent(DetailIntent.Retry)
@@ -101,7 +106,7 @@ class DetailViewModelTest {
     fun `Retry no-ops when already Loading`() = runTest {
         val deferred = CompletableDeferred<Result<LibraryDetail>>()
         coEvery { repository.getDetail(any()) } coAnswers { deferred.await() }
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
         assertTrue(vm.state.value is DetailUiState.Loading)
         vm.onIntent(DetailIntent.Retry)
         deferred.complete(Result.success(fakeDetail()))
@@ -111,7 +116,7 @@ class DetailViewModelTest {
     @Test
     fun `isPlayable is false when play is null`() = runTest {
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(play = null))
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
 
         val state = vm.state.value as DetailUiState.Content
         assertFalse(state.isPlayable)
@@ -122,7 +127,7 @@ class DetailViewModelTest {
     fun `isPlayable is false when state is not PLAYABLE even with play info`() = runTest {
         val detail = fakeDetail().copy(state = MediaState.DOWNLOADING)
         coEvery { repository.getDetail(any()) } returns Result.success(detail)
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
 
         val state = vm.state.value as DetailUiState.Content
         assertFalse(state.isPlayable)
@@ -157,7 +162,7 @@ class DetailViewModelTest {
         val episode = Episode(id = "ep1", number = 1, seasonNumber = 1, title = "Pilot", state = MediaState.PLAYABLE)
         coEvery { repository.getEpisodes(any(), 1) } returns Result.success(listOf(episode))
 
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
         vm.onIntent(DetailIntent.SelectSeason(1))
 
         val state = vm.state.value as DetailUiState.Content
@@ -173,11 +178,65 @@ class DetailViewModelTest {
         coEvery { repository.getDetail(any()) } returns Result.success(detail)
         coEvery { repository.getEpisodes(any(), 1) } returns Result.failure(RuntimeException("network error"))
 
-        val vm = DetailViewModel(id = "id1", repository = repository)
+        val vm = newVm()
         vm.onIntent(DetailIntent.SelectSeason(1))
 
         val state = vm.state.value as DetailUiState.Content
         assertNull(state.selectedSeason)
         assertTrue(state.episodes.isEmpty())
+    }
+
+    @Test
+    fun `mediaState is surfaced as PLAYABLE`() = runTest {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        val vm = newVm()
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.PLAYABLE, state.mediaState)
+    }
+
+    @Test
+    fun `mediaState is surfaced as REQUESTABLE`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        val vm = newVm()
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.REQUESTABLE, state.mediaState)
+    }
+
+    @Test
+    fun `mediaState is surfaced as DOWNLOADING`() = runTest {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(play = null))
+        val vm = newVm()
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.DOWNLOADING, state.mediaState)
+    }
+
+    @Test
+    fun `RequestMovie success flips mediaState to DOWNLOADING`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        coEvery { searchRepository.requestMovie("id1") } returns Result.success(Unit)
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.DOWNLOADING, state.mediaState)
+    }
+
+    @Test
+    fun `RequestMovie failure leaves mediaState unchanged`() = runTest {
+        val detail = fakeDetail(play = null).copy(state = MediaState.REQUESTABLE)
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        coEvery { searchRepository.requestMovie("id1") } returns Result.failure(RuntimeException("fail"))
+        val vm = newVm()
+
+        vm.onIntent(DetailIntent.RequestMovie)
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(MediaState.REQUESTABLE, state.mediaState)
     }
 }

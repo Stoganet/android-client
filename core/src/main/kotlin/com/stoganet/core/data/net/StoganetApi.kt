@@ -11,6 +11,7 @@ import com.stoganet.core.api.model.MediaType
 import com.stoganet.core.api.model.QuickConnectPollRequest
 import com.stoganet.core.api.model.QuickConnectStartResponse
 import com.stoganet.core.api.model.RefreshRequest
+import com.stoganet.core.api.model.SearchResponse
 import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.auth.LoginResult
 import com.stoganet.core.data.auth.QuickConnectPollResult
@@ -28,6 +29,11 @@ import io.ktor.http.isSuccess
 import java.io.IOException
 
 private const val TAG = "StoganetApi"
+
+// Carries the HTTP status so SearchViewModel can special-case 429 (silent retry-on-next-keystroke)
+// vs. other failures (visible error) — the other StoganetApi methods discard the status on failure
+// because no caller currently needs to branch on it.
+class SearchApiException(val status: HttpStatusCode) : Exception("search failed: ${status.value}")
 
 class StoganetApi(private val client: HttpClient, private val baseUrl: String = BASE_URL) {
 
@@ -116,5 +122,16 @@ class StoganetApi(private val client: HttpClient, private val baseUrl: String = 
             setBody(WatchProgress(positionMs = positionMs, played = played))
         }
         check(response.status.isSuccess()) { "reportProgress failed: ${response.status.value}" }
+    }
+
+    suspend fun search(query: String): SearchResponse {
+        val response = client.get("${baseUrl}search") { parameter("q", query) }
+        if (!response.status.isSuccess()) throw SearchApiException(response.status)
+        return response.body()
+    }
+
+    suspend fun requestMovie(id: String) {
+        val response = client.post("${baseUrl}library/$id/request")
+        check(response.status.isSuccess()) { "requestMovie failed: ${response.status.value}" }
     }
 }

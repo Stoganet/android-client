@@ -15,6 +15,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.test.core.app.ApplicationProvider
+import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.persistentListOf
@@ -34,29 +35,30 @@ class DetailScreenTest {
         ApplicationProvider.getApplicationContext<Context>().getString(id, *args)
 
     private fun fakeMovieContent(isPlayable: Boolean = true) = DetailUiState.Content(
-        title = "The Matrix",
+        title = "Test Movie",
         year = 1999,
         mediaType = MediaType.MOVIE,
         backdropUrl = null,
         overview = "A computer hacker learns the truth.",
         genres = persistentListOf("Action", "Sci-Fi"),
         runtime = "2h 16m",
-        cast = persistentListOf(CastMemberUiState("Keanu Reeves", "Actor")),
+        cast = persistentListOf(CastMemberUiState("Test Actor", "Actor")),
         seasons = persistentListOf(),
         resume = null,
         streamUrl = if (isPlayable) "https://api.stoganet.com/stream/abc" else null,
         isPlayable = isPlayable,
+        mediaState = MediaState.PLAYABLE,
     )
 
     private fun fakeTvContent() = DetailUiState.Content(
-        title = "Breaking Bad",
+        title = "Test Show",
         year = 2008,
         mediaType = MediaType.TV,
         backdropUrl = null,
         overview = "A chemistry teacher turns to crime.",
         genres = persistentListOf("Drama", "Crime"),
         runtime = "",
-        cast = persistentListOf(CastMemberUiState("Bryan Cranston", "Actor")),
+        cast = persistentListOf(CastMemberUiState("Test Actor Three", "Actor")),
         seasons = persistentListOf(
             SeasonUiState(1, "Season 1", 13, null, null),
             SeasonUiState(2, "Season 2", 13, null, null),
@@ -65,6 +67,7 @@ class DetailScreenTest {
         resume = null,
         streamUrl = null,
         isPlayable = false,
+        mediaState = MediaState.PLAYABLE,
     )
 
     @Test
@@ -105,7 +108,7 @@ class DetailScreenTest {
     fun contentState_movie_showsTitle() = runComposeUiTest {
         setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
-        onNodeWithText("The Matrix").assertIsDisplayed()
+        onNodeWithText("Test Movie").assertIsDisplayed()
     }
 
     @Test
@@ -118,7 +121,7 @@ class DetailScreenTest {
             )
         }
 
-        onNodeWithContentDescription(str(R.string.detail_play_content_description, "The Matrix")).assertIsDisplayed()
+        onNodeWithContentDescription(str(R.string.detail_play_content_description, "Test Movie")).assertIsDisplayed()
     }
 
     @Test
@@ -132,7 +135,7 @@ class DetailScreenTest {
             )
         }
 
-        val playDesc = str(R.string.detail_play_content_description, "The Matrix")
+        val playDesc = str(R.string.detail_play_content_description, "Test Movie")
         onNodeWithContentDescription(playDesc).requestFocus()
         onNodeWithContentDescription(playDesc).performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
@@ -152,7 +155,7 @@ class DetailScreenTest {
     fun contentState_showsCastMemberName() = runComposeUiTest {
         setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
-        onNodeWithText("Keanu Reeves").assertIsDisplayed()
+        onNodeWithText("Test Actor").assertIsDisplayed()
     }
 
     @Test
@@ -166,7 +169,7 @@ class DetailScreenTest {
         }
 
         onNodeWithContentDescription(
-            str(R.string.detail_not_available_content_description, "The Matrix"),
+            str(R.string.detail_not_available_content_description, "Test Movie"),
         ).assertIsDisplayed()
     }
 
@@ -182,11 +185,60 @@ class DetailScreenTest {
             )
         }
 
-        val playDesc = str(R.string.detail_play_content_description, "The Matrix")
+        val playDesc = str(R.string.detail_play_content_description, "Test Movie")
         onNodeWithContentDescription(playDesc).requestFocus()
         onNodeWithContentDescription(playDesc).performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
 
         assertEquals(expectedUrl, receivedUrl)
+    }
+
+    @Test
+    fun contentState_movie_requestable_showsRequestButton() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.REQUESTABLE),
+                onIntent = {},
+                onNavigateToPlayer = { _, _ -> },
+            )
+        }
+
+        onNodeWithContentDescription(
+            str(R.string.detail_request_content_description, "Test Movie"),
+        ).assertIsDisplayed()
+    }
+
+    @Test
+    fun contentState_movie_requestButton_invokesRequestMovieIntent() = runComposeUiTest {
+        var intentFired = false
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.REQUESTABLE),
+                onIntent = { if (it == DetailIntent.RequestMovie) intentFired = true },
+                onNavigateToPlayer = { _, _ -> },
+            )
+        }
+
+        val requestDesc = str(R.string.detail_request_content_description, "Test Movie")
+        onNodeWithContentDescription(requestDesc).requestFocus()
+        onNodeWithContentDescription(requestDesc).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertTrue(intentFired)
+    }
+
+    @Test
+    fun contentState_movie_downloading_showsDownloadingButton() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.DOWNLOADING),
+                onIntent = {},
+                onNavigateToPlayer = { _, _ -> },
+            )
+        }
+
+        onNodeWithContentDescription(
+            str(R.string.detail_downloading_content_description, "Test Movie"),
+        ).assertIsDisplayed()
     }
 }

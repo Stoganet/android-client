@@ -6,6 +6,7 @@ object AppRoutes {
     const val HOME = "home"
     const val LIBRARY_MOVIES = "library/movies"
     const val LIBRARY_TV = "library/tv"
+    const val SEARCH = "search"
     const val DETAIL = "detail/{id}"
     const val PLAYER = "player/{id}?streamUrl={streamUrl}&positionMs={positionMs}"
 

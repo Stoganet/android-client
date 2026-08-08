@@ -10,6 +10,7 @@ import com.stoganet.core.data.net.StoganetApi
 import com.stoganet.core.data.net.buildHttpClient
 import com.stoganet.core.data.net.buildRefreshHttpClient
 import com.stoganet.core.data.playback.PlaybackRepository
+import com.stoganet.core.data.search.SearchRepository
 import io.ktor.client.HttpClient
 
 class ServiceLocator(context: Context) {
@@ -33,4 +34,6 @@ class ServiceLocator(context: Context) {
     val detailRepository: DetailRepository by lazy { DetailRepository(stoganetApi) }
 
     val playbackRepository: PlaybackRepository by lazy { PlaybackRepository(stoganetApi) }
+
+    val searchRepository: SearchRepository by lazy { SearchRepository(stoganetApi) }
 }

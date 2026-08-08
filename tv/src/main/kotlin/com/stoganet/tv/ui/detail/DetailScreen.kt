@@ -38,6 +38,7 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.ImmutableList
@@ -191,14 +192,16 @@ private fun DetailMetadataPanel(
         item {
             when (state.mediaType) {
                 MediaType.MOVIE -> {
-                    DetailPlayButton(
+                    DetailActionButton(
                         title = state.title,
+                        mediaState = state.mediaState,
                         isPlayable = state.isPlayable,
                         focusRequester = focusRequester,
                         onNavigateToPlayer = {
-                            val url = state.streamUrl ?: return@DetailPlayButton
+                            val url = state.streamUrl ?: return@DetailActionButton
                             onNavigateToPlayer(url, 0L)
                         },
+                        onRequestMovie = { onIntent(DetailIntent.RequestMovie) },
                     )
                 }
 
@@ -329,28 +332,52 @@ private fun EpisodeRow(episode: EpisodeUiState, onNavigateToPlayer: (streamUrl: 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun DetailPlayButton(
+private fun DetailActionButton(
     title: String,
+    mediaState: MediaState,
     isPlayable: Boolean,
     focusRequester: FocusRequester,
     onNavigateToPlayer: () -> Unit,
+    onRequestMovie: () -> Unit,
 ) {
-    val playLabel: String
-    val playDesc: String
-    if (isPlayable) {
-        playLabel = stringResource(R.string.detail_play_button)
-        playDesc = stringResource(R.string.detail_play_content_description, title)
-    } else {
-        playLabel = stringResource(R.string.detail_not_available_button)
-        playDesc = stringResource(R.string.detail_not_available_content_description, title)
+    val label: String
+    val desc: String
+    val enabled: Boolean
+    val onClick: () -> Unit
+    when (mediaState) {
+        MediaState.PLAYABLE -> if (isPlayable) {
+            label = stringResource(R.string.detail_play_button)
+            desc = stringResource(R.string.detail_play_content_description, title)
+            enabled = true
+            onClick = onNavigateToPlayer
+        } else {
+            label = stringResource(R.string.detail_not_available_button)
+            desc = stringResource(R.string.detail_not_available_content_description, title)
+            enabled = false
+            onClick = {}
+        }
+
+        MediaState.REQUESTABLE -> {
+            label = stringResource(R.string.detail_request_button)
+            desc = stringResource(R.string.detail_request_content_description, title)
+            enabled = true
+            onClick = onRequestMovie
+        }
+
+        MediaState.DOWNLOADING -> {
+            label = stringResource(R.string.detail_downloading_button)
+            desc = stringResource(R.string.detail_downloading_content_description, title)
+            enabled = false
+            onClick = {}
+        }
     }
     Button(
-        onClick = { if (isPlayable) onNavigateToPlayer() },
-        enabled = isPlayable,
+        onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .focusRequester(focusRequester)
-            .semantics { contentDescription = playDesc },
-    ) { Text(playLabel) }
+            .semantics { contentDescription = desc },
+    ) { Text(label) }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -403,7 +430,7 @@ private fun PreviewError() {
 private fun PreviewMovieContent() {
     DetailScreen(
         state = DetailUiState.Content(
-            title = "The Matrix",
+            title = "Test Movie",
             year = 1999,
             mediaType = MediaType.MOVIE,
             backdropUrl = null,
@@ -411,13 +438,14 @@ private fun PreviewMovieContent() {
             genres = persistentListOf("Action", "Sci-Fi"),
             runtime = "2h 16m",
             cast = persistentListOf(
-                CastMemberUiState("Keanu Reeves", "Actor"),
-                CastMemberUiState("Laurence Fishburne", "Actor"),
+                CastMemberUiState("Test Actor", "Actor"),
+                CastMemberUiState("Test Actor Two", "Actor"),
             ),
             seasons = persistentListOf(),
             resume = null,
             streamUrl = "https://stream.example.com/matrix",
             isPlayable = true,
+            mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
@@ -429,14 +457,14 @@ private fun PreviewMovieContent() {
 private fun PreviewTvWithSeasons() {
     DetailScreen(
         state = DetailUiState.Content(
-            title = "Breaking Bad",
+            title = "Test Show",
             year = 2008,
             mediaType = MediaType.TV,
             backdropUrl = null,
             overview = "A chemistry teacher turns to manufacturing drugs after a cancer diagnosis.",
             genres = persistentListOf("Drama", "Crime"),
             runtime = "",
-            cast = persistentListOf(CastMemberUiState("Bryan Cranston", "Actor")),
+            cast = persistentListOf(CastMemberUiState("Test Actor Three", "Actor")),
             seasons = persistentListOf(
                 SeasonUiState(1, "Season 1", 7, null, null),
                 SeasonUiState(2, "Season 2", 13, null, null),
@@ -451,6 +479,7 @@ private fun PreviewTvWithSeasons() {
             ),
             streamUrl = null,
             isPlayable = false,
+            mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
@@ -462,7 +491,7 @@ private fun PreviewTvWithSeasons() {
 private fun PreviewTvWithEpisodes() {
     DetailScreen(
         state = DetailUiState.Content(
-            title = "Breaking Bad",
+            title = "Test Show",
             year = 2008,
             mediaType = MediaType.TV,
             backdropUrl = null,
@@ -480,7 +509,7 @@ private fun PreviewTvWithEpisodes() {
             episodes = persistentListOf(
                 EpisodeUiState(
                     id = "ep1", number = 1, title = "Pilot",
-                    overview = "Walter White turns to crime.", runtimeMinutes = 58,
+                    overview = "A teacher turns to crime.", runtimeMinutes = 58,
                     thumbnailUrl = null, streamUrl = "https://stream/ep1", positionMs = 0L, played = false,
                 ),
                 EpisodeUiState(
@@ -490,6 +519,7 @@ private fun PreviewTvWithEpisodes() {
                 ),
             ),
             isPlayable = false,
+            mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
@@ -501,7 +531,7 @@ private fun PreviewTvWithEpisodes() {
 private fun PreviewNotPlayable() {
     DetailScreen(
         state = DetailUiState.Content(
-            title = "The Matrix",
+            title = "Test Movie",
             year = 1999,
             mediaType = MediaType.MOVIE,
             backdropUrl = null,
@@ -513,6 +543,55 @@ private fun PreviewNotPlayable() {
             resume = null,
             streamUrl = null,
             isPlayable = false,
+            mediaState = MediaState.PLAYABLE,
+        ),
+        onIntent = {},
+        onNavigateToPlayer = { _, _ -> },
+    )
+}
+
+@Preview(showBackground = true, widthDp = 1280, heightDp = 720)
+@Composable
+private fun PreviewRequestable() {
+    DetailScreen(
+        state = DetailUiState.Content(
+            title = "Test Sequel",
+            year = 2026,
+            mediaType = MediaType.MOVIE,
+            backdropUrl = null,
+            overview = "The saga concludes.",
+            genres = persistentListOf("Sci-Fi"),
+            runtime = "",
+            cast = persistentListOf(),
+            seasons = persistentListOf(),
+            resume = null,
+            streamUrl = null,
+            isPlayable = false,
+            mediaState = MediaState.REQUESTABLE,
+        ),
+        onIntent = {},
+        onNavigateToPlayer = { _, _ -> },
+    )
+}
+
+@Preview(showBackground = true, widthDp = 1280, heightDp = 720)
+@Composable
+private fun PreviewDownloading() {
+    DetailScreen(
+        state = DetailUiState.Content(
+            title = "Test Sequel",
+            year = 2026,
+            mediaType = MediaType.MOVIE,
+            backdropUrl = null,
+            overview = "The saga concludes.",
+            genres = persistentListOf("Sci-Fi"),
+            runtime = "",
+            cast = persistentListOf(),
+            seasons = persistentListOf(),
+            resume = null,
+            streamUrl = null,
+            isPlayable = false,
+            mediaState = MediaState.DOWNLOADING,
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },

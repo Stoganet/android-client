@@ -12,6 +12,7 @@ import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -21,7 +22,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class DetailViewModel(private val id: String, private val repository: DetailRepository) : ViewModel() {
+class DetailViewModel(
+    private val id: String,
+    private val repository: DetailRepository,
+    private val searchRepository: SearchRepository,
+) : ViewModel() {
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
@@ -38,6 +43,22 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
             }
 
             is DetailIntent.SelectSeason -> selectSeason(intent.seasonNumber)
+
+            DetailIntent.RequestMovie -> requestMovie()
+        }
+    }
+
+    private fun requestMovie() {
+        viewModelScope.launch {
+            searchRepository.requestMovie(id).onSuccess {
+                _state.update { current ->
+                    if (current is DetailUiState.Content) {
+                        current.copy(mediaState = MediaState.DOWNLOADING)
+                    } else {
+                        current
+                    }
+                }
+            }
         }
     }
 
@@ -92,6 +113,7 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
         resume = resume?.toUiState(),
         streamUrl = play?.streamUrl,
         isPlayable = state == MediaState.PLAYABLE && play != null,
+        mediaState = state,
     )
 
     companion object {
@@ -109,7 +131,11 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
         fun factory(id: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as StoganetApp
-                DetailViewModel(id = id, repository = app.services.detailRepository)
+                DetailViewModel(
+                    id = id,
+                    repository = app.services.detailRepository,
+                    searchRepository = app.services.searchRepository,
+                )
             }
         }
     }
