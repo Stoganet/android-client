@@ -79,32 +79,45 @@ class SearchViewModelTest {
         testDispatcher.scheduler.advanceTimeBy(100)
         vm.onIntent(SearchIntent.QueryChanged("neo"))
         testDispatcher.scheduler.advanceTimeBy(100)
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         testDispatcher.scheduler.advanceUntilIdle()
 
-        coVerify(exactly = 1) { repository.search("neon") }
+        coVerify(exactly = 1) { repository.search("movie") }
         coVerify(exactly = 0) { repository.search("ne") }
         coVerify(exactly = 0) { repository.search("neo") }
     }
 
     @Test
     fun `Submit fires immediately without waiting for debounce`() = runTest(testDispatcher) {
-        coEvery { repository.search("neon") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
         val vm = SearchViewModel(repository)
 
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         vm.onIntent(SearchIntent.Submit)
         testDispatcher.scheduler.runCurrent()
 
-        coVerify { repository.search("neon") }
+        coVerify { repository.search("movie") }
+    }
+
+    @Test
+    fun `Submit cancels the pending debounced search`() = runTest(testDispatcher) {
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
+        val vm = SearchViewModel(repository)
+
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
+        testDispatcher.scheduler.advanceTimeBy(100)
+        vm.onIntent(SearchIntent.Submit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.search("movie") }
     }
 
     @Test
     fun `success with items updates state to Results`() = runTest(testDispatcher) {
-        coEvery { repository.search("neon") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
         val vm = SearchViewModel(repository)
 
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = vm.state.value
@@ -126,15 +139,15 @@ class SearchViewModelTest {
 
     @Test
     fun `429 failure keeps state unchanged`() = runTest(testDispatcher) {
-        coEvery { repository.search("neon") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
         val vm = SearchViewModel(repository)
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         testDispatcher.scheduler.advanceUntilIdle()
         val stateBefore = vm.state.value
 
-        coEvery { repository.search("neon2") } returns
+        coEvery { repository.search("movie2") } returns
             Result.failure(SearchApiException(HttpStatusCode.TooManyRequests))
-        vm.onIntent(SearchIntent.QueryChanged("neon2"))
+        vm.onIntent(SearchIntent.QueryChanged("movie2"))
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(stateBefore, vm.state.value)
@@ -142,11 +155,11 @@ class SearchViewModelTest {
 
     @Test
     fun `503 failure updates state to Error`() = runTest(testDispatcher) {
-        coEvery { repository.search("neon") } returns
+        coEvery { repository.search("movie") } returns
             Result.failure(SearchApiException(HttpStatusCode.ServiceUnavailable))
         val vm = SearchViewModel(repository)
 
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertInstanceOf(SearchUiState.Error::class.java, vm.state.value)
@@ -156,12 +169,12 @@ class SearchViewModelTest {
     fun `stale response does not overwrite newer result`() = runTest(testDispatcher) {
         val staleDeferred = CompletableDeferred<Result<List<LibraryItem>>>()
         coEvery { repository.search("ne") } coAnswers { staleDeferred.await() }
-        coEvery { repository.search("neon") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
         val vm = SearchViewModel(repository)
 
         vm.onIntent(SearchIntent.QueryChanged("ne"))
         testDispatcher.scheduler.advanceUntilIdle()
-        vm.onIntent(SearchIntent.QueryChanged("neon"))
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
         testDispatcher.scheduler.advanceUntilIdle()
 
         staleDeferred.complete(Result.success(listOf(fakeItem(id = "stale"))))

@@ -12,11 +12,11 @@ import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.tv.StoganetApp
 import io.ktor.http.HttpStatusCode
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -24,28 +24,31 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val MIN_QUERY_LENGTH = 2
 private const val DEBOUNCE_MS = 400L
 
-@OptIn(FlowPreview::class)
 class SearchViewModel(private val repository: SearchRepository) : ViewModel() {
 
     private val _state = MutableStateFlow<SearchUiState>(SearchUiState.Empty())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
     private val queryFlow = MutableStateFlow("")
-
-    init {
-        viewModelScope.launch {
-            queryFlow.debounce(DEBOUNCE_MS.milliseconds).collect { runSearch(it) }
-        }
-    }
+    private var debounceJob: Job? = null
 
     fun onIntent(intent: SearchIntent) {
         when (intent) {
             is SearchIntent.QueryChanged -> {
                 queryFlow.value = intent.text
-                if (intent.text.isBlank()) _state.update { SearchUiState.Empty(intent.text) }
+                debounceJob?.cancel()
+                if (intent.text.isBlank()) {
+                    _state.update { SearchUiState.Empty(intent.text) }
+                } else {
+                    debounceJob = viewModelScope.launch {
+                        delay(DEBOUNCE_MS.milliseconds)
+                        runSearch(intent.text)
+                    }
+                }
             }
 
             SearchIntent.Submit -> {
+                debounceJob?.cancel()
                 val query = queryFlow.value
                 if (query.length >= MIN_QUERY_LENGTH) {
                     viewModelScope.launch { runSearch(query) }
