@@ -255,4 +255,55 @@ class StoganetApiTest {
 
         assertThrows<IllegalStateException> { api.getDetail("tmdb:movie:603") }
     }
+
+    @Test
+    fun `search returns SearchResponse on 200`() = runTest {
+        val json = """{"items":[{"id":"tmdb:movie:603","title":"Test Movie","year":1999,"type":"movie",""" +
+            """"poster":"","overview":"A hacker.","state":"requestable"}]}"""
+        val engine = MockEngine { respond(json, HttpStatusCode.OK, jsonHeader) }
+        val api = buildApi(engine)
+
+        val result = api.search("test")
+
+        assertEquals(1, result.items.size)
+        assertEquals("tmdb:movie:603", result.items[0].id)
+    }
+
+    @Test
+    fun `search sends q query param`() = runTest {
+        val engine = MockEngine { request ->
+            assertEquals("test", request.url.parameters["q"])
+            respond("""{"items":[]}""", HttpStatusCode.OK, jsonHeader)
+        }
+        val api = buildApi(engine)
+
+        api.search("test")
+    }
+
+    @Test
+    fun `search throws SearchApiException on non-success status`() = runTest {
+        val engine = MockEngine { respond("", HttpStatusCode.TooManyRequests) }
+        val api = buildApi(engine)
+
+        val exception = assertThrows<SearchApiException> { api.search("test") }
+        assertEquals(HttpStatusCode.TooManyRequests, exception.status)
+    }
+
+    @Test
+    fun `requestMovie succeeds on 204`() = runTest {
+        val engine = MockEngine { respond("", HttpStatusCode.NoContent) }
+        val api = buildApi(engine)
+
+        api.requestMovie("tmdb:movie:603")
+
+        assertEquals(1, engine.requestHistory.size)
+    }
+
+    @Test
+    fun `requestMovie throws on non-success status`() = runTest {
+        val engine = MockEngine { respond("", HttpStatusCode.BadRequest) }
+        val api = buildApi(engine)
+
+        assertThrows<IllegalStateException> { api.requestMovie("tmdb:movie:603") }
+    }
 }

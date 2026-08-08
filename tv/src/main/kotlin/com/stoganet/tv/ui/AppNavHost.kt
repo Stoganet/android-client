@@ -1,17 +1,21 @@
 package com.stoganet.tv.ui
 
+import android.annotation.SuppressLint
+import android.widget.Toast
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -35,6 +39,7 @@ import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
+import com.stoganet.tv.StoganetApp
 import com.stoganet.tv.ui.detail.DetailScreen
 import com.stoganet.tv.ui.detail.DetailViewModel
 import com.stoganet.tv.ui.home.HomeScreen
@@ -44,7 +49,10 @@ import com.stoganet.tv.ui.library.LibraryViewModel
 import com.stoganet.tv.ui.player.PlayerIntent
 import com.stoganet.tv.ui.player.PlayerScreen
 import com.stoganet.tv.ui.player.PlayerViewModel
+import com.stoganet.tv.ui.search.SearchScreen
+import com.stoganet.tv.ui.search.SearchViewModel
 
+@SuppressLint("LocalContextGetResourceValueCall")
 @Suppress("LongMethod")
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -52,6 +60,14 @@ fun AppNavHost() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        val app = context.applicationContext as StoganetApp
+        app.services.userMessageCenter.messages.collect { messageResId ->
+            Toast.makeText(context, context.getString(messageResId), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val navigateTo: (String) -> Unit = remember(navController) {
         { route ->
@@ -94,6 +110,17 @@ fun AppNavHost() {
                     state = state,
                     onIntent = vm::onIntent,
                     onNavigateTo = { route -> navController.navigate(route) },
+                )
+            }
+        }
+        composable(AppRoutes.SEARCH) {
+            DrawerScaffold(currentRoute = currentRoute, navigateTo = navigateTo) {
+                val vm: SearchViewModel = viewModel(factory = SearchViewModel.factory())
+                val state by vm.state.collectAsStateWithLifecycle()
+                SearchScreen(
+                    state = state,
+                    onIntent = vm::onIntent,
+                    onNavigateToDetail = { id -> navController.navigate(AppRoutes.detail(id)) },
                 )
             }
         }
@@ -156,16 +183,20 @@ private fun DrawerScaffold(currentRoute: String?, navigateTo: (String) -> Unit, 
 @Composable
 private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, navigateTo: (String) -> Unit) {
     val homeLabel = stringResource(R.string.nav_home)
+    val searchLabel = stringResource(R.string.nav_search)
     val moviesLabel = stringResource(R.string.nav_movies)
     val tvLabel = stringResource(R.string.nav_tv_shows)
     val homeDesc = stringResource(R.string.nav_item_selected_description, homeLabel)
+    val searchDesc = stringResource(R.string.nav_item_selected_description, searchLabel)
     val moviesDesc = stringResource(R.string.nav_item_selected_description, moviesLabel)
     val tvDesc = stringResource(R.string.nav_item_selected_description, tvLabel)
 
     val homeFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
     val moviesFocusRequester = remember { FocusRequester() }
     val tvFocusRequester = remember { FocusRequester() }
     val selectedFocusRequester = when (currentRoute) {
+        AppRoutes.SEARCH -> searchFocusRequester
         AppRoutes.LIBRARY_MOVIES -> moviesFocusRequester
         AppRoutes.LIBRARY_TV -> tvFocusRequester
         else -> homeFocusRequester
@@ -189,6 +220,16 @@ private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, naviga
                     contentDescription = if (currentRoute == AppRoutes.HOME) homeDesc else homeLabel
                 },
         ) { Text(homeLabel) }
+        NavigationDrawerItem(
+            selected = currentRoute == AppRoutes.SEARCH,
+            onClick = { navigateTo(AppRoutes.SEARCH) },
+            leadingContent = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+            modifier = Modifier
+                .focusRequester(searchFocusRequester)
+                .semantics {
+                    contentDescription = if (currentRoute == AppRoutes.SEARCH) searchDesc else searchLabel
+                },
+        ) { Text(searchLabel) }
         NavigationDrawerItem(
             selected = currentRoute == AppRoutes.LIBRARY_MOVIES,
             onClick = { navigateTo(AppRoutes.LIBRARY_MOVIES) },
@@ -217,6 +258,13 @@ private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, naviga
 @Composable
 private fun PreviewNavDrawerHomeSelected() {
     NavigationDrawer(drawerContent = { NavDrawerContent(currentRoute = AppRoutes.HOME, navigateTo = {}) }) {}
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Preview(showBackground = true, widthDp = 300, heightDp = 720)
+@Composable
+private fun PreviewNavDrawerSearchSelected() {
+    NavigationDrawer(drawerContent = { NavDrawerContent(currentRoute = AppRoutes.SEARCH, navigateTo = {}) }) {}
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

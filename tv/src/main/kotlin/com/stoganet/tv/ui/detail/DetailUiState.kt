@@ -1,6 +1,7 @@
 package com.stoganet.tv.ui.detail
 
 import androidx.compose.runtime.Immutable
+import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -59,6 +60,7 @@ sealed interface DetailUiState {
         val resume: ResumeUiState?,
         val streamUrl: String?,
         val isPlayable: Boolean,
+        val mediaState: MediaState,
         val episodes: ImmutableList<EpisodeUiState> = persistentListOf(),
         val selectedSeason: Int? = null,
     ) : DetailUiState

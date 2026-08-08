@@ -12,6 +12,9 @@ import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.search.SearchRepository
+import com.stoganet.core.util.UserMessageCenter
+import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -21,7 +24,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class DetailViewModel(private val id: String, private val repository: DetailRepository) : ViewModel() {
+class DetailViewModel(
+    private val id: String,
+    private val repository: DetailRepository,
+    private val searchRepository: SearchRepository,
+    private val userMessageCenter: UserMessageCenter,
+) : ViewModel() {
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
@@ -38,6 +46,26 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
             }
 
             is DetailIntent.SelectSeason -> selectSeason(intent.seasonNumber)
+
+            DetailIntent.RequestMovie -> requestMovie()
+        }
+    }
+
+    private fun requestMovie() {
+        val current = _state.value
+        if (current !is DetailUiState.Content || current.mediaState != MediaState.REQUESTABLE) return
+        _state.update { (it as DetailUiState.Content).copy(mediaState = MediaState.DOWNLOADING) }
+        viewModelScope.launch {
+            searchRepository.requestMovie(id).onFailure {
+                _state.update { state ->
+                    if (state is DetailUiState.Content) {
+                        state.copy(mediaState = MediaState.REQUESTABLE)
+                    } else {
+                        state
+                    }
+                }
+                userMessageCenter.show(R.string.detail_request_failed_message)
+            }
         }
     }
 
@@ -92,6 +120,7 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
         resume = resume?.toUiState(),
         streamUrl = play?.streamUrl,
         isPlayable = state == MediaState.PLAYABLE && play != null,
+        mediaState = state,
     )
 
     companion object {
@@ -109,7 +138,12 @@ class DetailViewModel(private val id: String, private val repository: DetailRepo
         fun factory(id: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as StoganetApp
-                DetailViewModel(id = id, repository = app.services.detailRepository)
+                DetailViewModel(
+                    id = id,
+                    repository = app.services.detailRepository,
+                    searchRepository = app.services.searchRepository,
+                    userMessageCenter = app.services.userMessageCenter,
+                )
             }
         }
     }

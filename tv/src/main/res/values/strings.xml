@@ -31,6 +31,7 @@
     <string name="nav_home">Home</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_tv_shows">TV Shows</string>
+    <string name="nav_search">Search</string>
     <string name="nav_item_selected_description">%1$s, selected</string>
     <string name="library_error_message">Could not load library. Please try again.</string>
     <string name="library_load_more_error">Couldn\'t load more items.</string>
@@ -40,6 +41,15 @@
     <string name="detail_cast_label">Cast</string>
     <string name="detail_play_content_description">Play %1$s</string>
     <string name="detail_not_available_content_description">%1$s is not available for playback</string>
+    <string name="detail_request_button">Request</string>
+    <string name="detail_request_content_description">Request %1$s</string>
+    <string name="detail_downloading_button">Downloading</string>
+    <string name="detail_downloading_content_description">%1$s is downloading</string>
+    <string name="detail_request_failed_message">Couldn\'t request this title. Try again.</string>
+    <string name="search_hint">Search for movies</string>
+    <string name="search_empty_hint">Search for movies</string>
+    <string name="search_no_results">No results for \"%1$s\"</string>
+    <string name="search_error_message">Couldn\'t search. Please try again.</string>
     <string name="player_error_message">Couldn\'t start playback.</string>
     <string name="player_back_content_description">Back</string>
     <plurals name="detail_seasons_label">
