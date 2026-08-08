@@ -17,12 +17,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +53,12 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     var fieldValue by rememberSaveable { mutableStateOf(state.query) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 32.dp)) {
         val hint = stringResource(R.string.search_hint)
@@ -63,6 +74,7 @@ fun SearchScreen(
             keyboardActions = KeyboardActions(onSearch = { onIntent(SearchIntent.Submit) }),
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .semantics { contentDescription = hint },
         )
         Spacer(modifier = Modifier.height(24.dp))
