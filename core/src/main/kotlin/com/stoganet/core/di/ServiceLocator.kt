@@ -8,6 +8,7 @@ import com.stoganet.core.data.home.HomeRepository
 import com.stoganet.core.data.library.LibraryRepository
 import com.stoganet.core.data.net.StoganetApi
 import com.stoganet.core.data.net.buildHttpClient
+import com.stoganet.core.data.net.buildRefreshHttpClient
 import com.stoganet.core.data.playback.PlaybackRepository
 import io.ktor.client.HttpClient
 
@@ -18,6 +19,8 @@ class ServiceLocator(context: Context) {
     val tokenStore: TokenStore by lazy { TokenStore.create(appContext) }
 
     val httpClient: HttpClient by lazy { buildHttpClient(tokenStore) }
+
+    val refreshHttpClient: HttpClient by lazy { buildRefreshHttpClient() }
 
     private val stoganetApi: StoganetApi by lazy { StoganetApi(httpClient) }
 

@@ -83,3 +83,35 @@ internal fun HttpClientConfig<*>.configurePlugins(tokenStore: TokenStore, baseUr
         install(Logging) { level = LogLevel.INFO }
     }
 }
+
+// Unauthenticated on purpose: /auth/refresh needs no bearer token, and ExoPlayer's stream
+// requests (separate OkHttp-based data source, see PlayerViewModel) can't reach the Auth
+// plugin on buildHttpClient's client to trigger its refreshTokens{} callback on a 401.
+fun buildRefreshHttpClient(): HttpClient = HttpClient(OkHttp) {
+    install(ContentNegotiation) {
+        json(Json { ignoreUnknownKeys = true })
+    }
+    if (BuildConfig.DEBUG) {
+        install(Logging) { level = LogLevel.INFO }
+    }
+}
+
+suspend fun performTokenRefresh(
+    refreshClient: HttpClient,
+    tokenStore: TokenStore,
+    baseUrl: String,
+    refreshToken: String,
+): TokenPair? {
+    val response = refreshClient.post("${baseUrl}auth/refresh") {
+        contentType(ContentType.Application.Json)
+        setBody(RefreshRequest(refreshToken = refreshToken))
+    }
+    if (!response.status.isSuccess()) {
+        Log.w(TAG, "token refresh failed: ${response.status.value}")
+        tokenStore.clear()
+        return null
+    }
+    val pair = response.body<TokenPair>()
+    tokenStore.saveTokens(pair)
+    return pair
+}

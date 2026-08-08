@@ -12,10 +12,13 @@ import androidx.media3.common.listenTo
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.net.BASE_URL
+import com.stoganet.core.data.net.performTokenRefresh
 import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.tv.StoganetApp
 import kotlinx.coroutines.Job
@@ -38,6 +41,7 @@ class PlayerViewModel(
     private val playbackRepository: PlaybackRepository,
     val player: ExoPlayer,
     private val mediaSession: MediaSession,
+    private val refreshTokens: suspend () -> Boolean,
     private val streamUrl: String? = null,
     private val positionMs: Long = 0L,
 ) : ViewModel() {
@@ -48,6 +52,7 @@ class PlayerViewModel(
     private var currentStreamUrl: String? = streamUrl
     private var tickJob: Job? = null
     private var isExiting = false
+    private var hasRetriedAfterAuthError = false
 
     init {
         viewModelScope.launch {
@@ -57,7 +62,7 @@ class PlayerViewModel(
                 Player.EVENT_PLAYER_ERROR,
             ) { events ->
                 if (events.contains(Player.EVENT_PLAYER_ERROR)) {
-                    _state.update { PlayerUiState.Error }
+                    handlePlayerError()
                 }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     if (isPlaying) {
@@ -93,6 +98,7 @@ class PlayerViewModel(
     private fun loadAndPrepare() {
         val url = streamUrl
         if (url != null) {
+            currentStreamUrl = url
             player.setMediaItem(MediaItem.fromUri(url), positionMs)
             player.prepare()
             player.play()
@@ -115,6 +121,43 @@ class PlayerViewModel(
                 }
                 .onFailure { _state.update { PlayerUiState.Error } }
         }
+    }
+
+    // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
+    // sees Ktor's Auth plugin, so a 401 here needs its own refresh-and-retry, once.
+    private fun handlePlayerError() {
+        val url = currentStreamUrl
+        if (hasRetriedAfterAuthError || url == null || !isUnauthorized(player.playerError)) {
+            _state.update { PlayerUiState.Error }
+            return
+        }
+        hasRetriedAfterAuthError = true
+        val resumeMs = player.currentPosition
+        viewModelScope.launch {
+            if (!refreshTokens()) {
+                _state.update { PlayerUiState.Error }
+                return@launch
+            }
+            player.setMediaItem(MediaItem.fromUri(url), resumeMs)
+            player.prepare()
+            player.play()
+            _state.update { PlayerUiState.Ready }
+        }
+    }
+
+    private fun isUnauthorized(error: Throwable?): Boolean {
+        var cause: Throwable? = error
+        var depth = 0
+        while (cause != null && depth < MAX_CAUSE_CHAIN_DEPTH) {
+            if (cause is HttpDataSource.InvalidResponseCodeException &&
+                cause.responseCode == UNAUTHORIZED_STATUS_CODE
+            ) {
+                return true
+            }
+            cause = cause.cause
+            depth++
+        }
+        return false
     }
 
     private fun startTick() {
@@ -148,6 +191,8 @@ class PlayerViewModel(
 
     companion object {
         private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
+        private const val UNAUTHORIZED_STATUS_CODE = 401
+        private const val MAX_CAUSE_CHAIN_DEPTH = 10
 
         @androidx.annotation.OptIn(UnstableApi::class)
         fun factory(id: String, streamUrl: String? = null, positionMs: Long = 0L): ViewModelProvider.Factory =
@@ -165,12 +210,18 @@ class PlayerViewModel(
                         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
                         .build()
                     val mediaSession = MediaSession.Builder(app, player).build()
+                    val refreshHttpClient = app.services.refreshHttpClient
                     PlayerViewModel(
                         id = id,
                         repository = app.services.detailRepository,
                         playbackRepository = app.services.playbackRepository,
                         player = player,
                         mediaSession = mediaSession,
+                        refreshTokens = {
+                            val refreshToken = tokenStore.refreshToken()
+                            refreshToken != null &&
+                                performTokenRefresh(refreshHttpClient, tokenStore, BASE_URL, refreshToken) != null
+                        },
                         streamUrl = streamUrl,
                         positionMs = positionMs,
                     )
