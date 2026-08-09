@@ -31,7 +31,7 @@ class DetailRepositoryTest {
         runtime = 136,
         cast = listOf(CastMember(name = "Keanu Reeves", role = "Actor")),
         seasons = emptyList(),
-        play = PlayInfo(streamUrl = "https://api.stoganet.com/stream/jf-uuid"),
+        play = PlayInfo(streamUrl = "https://api.stoganet.com/stream/jf-uuid", subtitleTracks = emptyList()),
     )
 
     @Test
