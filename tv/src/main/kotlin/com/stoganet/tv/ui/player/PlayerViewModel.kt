@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.listenTo
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -57,6 +58,7 @@ class PlayerViewModel(
 
     private var currentStreamUrl: String? = streamUrl
     private var currentSubtitleTracks: List<SubtitleTrackUi> = emptyList()
+    private var desiredSubtitleIndex: Int? = null
     private var tickJob: Job? = null
     private var uiTickJob: Job? = null
     private var hideControlsJob: Job? = null
@@ -69,9 +71,13 @@ class PlayerViewModel(
                 Player.EVENT_IS_PLAYING_CHANGED,
                 Player.EVENT_PLAYBACK_STATE_CHANGED,
                 Player.EVENT_PLAYER_ERROR,
+                Player.EVENT_TRACKS_CHANGED,
             ) { events ->
                 if (events.contains(Player.EVENT_PLAYER_ERROR)) {
                     handlePlayerError()
+                }
+                if (events.contains(Player.EVENT_TRACKS_CHANGED)) {
+                    applyDesiredSubtitleTrack()
                 }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     if (isPlaying) {
@@ -147,7 +153,8 @@ class PlayerViewModel(
 
     private fun selectSubtitleTrack(index: Int?) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
-        applySubtitleTrack(ready.subtitleTracks, index)
+        desiredSubtitleIndex = index
+        applyDesiredSubtitleTrack()
         val language = ready.subtitleTracks.firstOrNull { it.index == index }?.language
         if (language != null) {
             viewModelScope.launch { subtitlePreferenceStore.savePreferredLanguage(language) }
@@ -158,12 +165,23 @@ class PlayerViewModel(
         scheduleHideControls()
     }
 
-    private fun applySubtitleTrack(tracks: List<SubtitleTrackUi>, index: Int?) {
-        val track = tracks.firstOrNull { it.index == index }
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, track == null)
-            .setPreferredTextLanguage(track?.language)
-            .build()
+    // Matches by Format.id, not language, so same-language tracks (muxed + external .srt) stay
+    // distinguishable. Re-run on EVENT_TRACKS_CHANGED since tracks aren't known right after prepare().
+    private fun applyDesiredSubtitleTrack() {
+        val target = desiredSubtitleIndex
+        val textGroup = target?.let { idx ->
+            player.currentTracks.groups.firstOrNull { group ->
+                group.type == C.TRACK_TYPE_TEXT &&
+                    (0 until group.length).any { i -> group.getTrackFormat(i).id == idx.toString() }
+            }
+        }
+        val builder = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, textGroup == null)
+        if (textGroup != null) {
+            builder.addOverride(TrackSelectionOverride(textGroup.mediaTrackGroup, 0))
+        }
+        player.trackSelectionParameters = builder.build()
     }
 
     private fun exit() {
@@ -197,7 +215,8 @@ class PlayerViewModel(
             val preferredLanguage = subtitlePreferenceStore.current()
             val initialTrack = tracks.firstOrNull { it.language == preferredLanguage }
                 ?: tracks.firstOrNull { it.isDefault }
-            applySubtitleTrack(tracks, initialTrack?.index)
+            desiredSubtitleIndex = initialTrack?.index
+            applyDesiredSubtitleTrack()
             emitReady(positionMs = positionMs, tracks = tracks, selectedIndex = initialTrack?.index)
         }
     }
@@ -208,6 +227,7 @@ class PlayerViewModel(
                 .setMimeType(MimeTypes.TEXT_VTT)
                 .setLanguage(track.language)
                 .setLabel(track.title)
+                .setId(track.index.toString())
                 .build()
         }
         return MediaItem.Builder().setUri(streamUrl).setSubtitleConfigurations(subtitleConfigs).build()
@@ -252,7 +272,7 @@ class PlayerViewModel(
                 tracks = currentSubtitleTracks,
                 selectedIndex = ready?.selectedSubtitleIndex,
             )
-            applySubtitleTrack(currentSubtitleTracks, ready?.selectedSubtitleIndex)
+            applyDesiredSubtitleTrack()
         }
     }
 

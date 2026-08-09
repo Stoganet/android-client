@@ -1,11 +1,16 @@
 package com.stoganet.tv.ui.player
 
 import android.net.Uri
+import androidx.media3.common.C
 import androidx.media3.common.FlagSet
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
@@ -74,6 +79,7 @@ class PlayerViewModelTest {
         every { player.playerError } returns null
         every { player.trackSelectionParameters } returns TrackSelectionParameters.DEFAULT
         every { player.trackSelectionParameters = capture(trackParamsSlot) } just Runs
+        every { player.currentTracks } returns Tracks.EMPTY
         coEvery { subtitlePreferenceStore.current() } returns null
         coEvery { subtitlePreferenceStore.savePreferredLanguage(any()) } just Runs
         // loadAndPrepare() always fetches detail; default to a successful fetch with no
@@ -115,6 +121,16 @@ class PlayerViewModelTest {
             isForced = false,
             isExternal = false,
         )
+
+    // Mirrors what ExoPlayer reports once a media source with sideloaded subtitles is prepared:
+    // one text TrackGroup per SubtitleConfiguration, identified by the Format.id we set on it.
+    private fun fakeTextTracks(vararg indices: Int): Tracks {
+        val groups = indices.map { idx ->
+            val format = Format.Builder().setId(idx.toString()).setSampleMimeType(MimeTypes.TEXT_VTT).build()
+            Tracks.Group(TrackGroup(format), false, intArrayOf(C.FORMAT_HANDLED), booleanArrayOf(false))
+        }
+        return Tracks(groups)
+    }
 
     private fun newVm(streamUrl: String? = "https://api.stoganet.com/stream/abc123") = PlayerViewModel(
         id = "id1",
@@ -365,13 +381,14 @@ class PlayerViewModelTest {
             fakeSubtitleTrack(index = 2, language = "eng", isDefault = false),
             fakeSubtitleTrack(index = 3, language = "fin", isDefault = true),
         )
+        every { player.currentTracks } returns fakeTextTracks(2, 3)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
         val vm = newVmFromDetail()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val ready = vm.state.value as PlayerUiState.Ready
         assertEquals(3, ready.selectedSubtitleIndex)
-        assertFalse(trackParamsSlot.captured.disabledTrackTypes.contains(androidx.media3.common.C.TRACK_TYPE_TEXT))
+        assertFalse(trackParamsSlot.captured.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
     }
 
     @Test
@@ -381,6 +398,7 @@ class PlayerViewModelTest {
             fakeSubtitleTrack(index = 2, language = "eng", isDefault = false),
             fakeSubtitleTrack(index = 3, language = "fin", isDefault = true),
         )
+        every { player.currentTracks } returns fakeTextTracks(2, 3)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
         val vm = newVmFromDetail()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -398,12 +416,13 @@ class PlayerViewModelTest {
 
         val ready = vm.state.value as PlayerUiState.Ready
         assertNull(ready.selectedSubtitleIndex)
-        assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(androidx.media3.common.C.TRACK_TYPE_TEXT))
+        assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
     }
 
     @Test
     fun `SelectSubtitleTrack updates selection and persists language`() = runTest(testDispatcher) {
         val tracks = listOf(fakeSubtitleTrack(index = 2, language = "eng", title = "English"))
+        every { player.currentTracks } returns fakeTextTracks(2)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
         val vm = newVmFromDetail()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -415,6 +434,24 @@ class PlayerViewModelTest {
         assertEquals(2, ready.selectedSubtitleIndex)
         assertFalse(ready.subtitleMenuOpen)
         coVerify { subtitlePreferenceStore.savePreferredLanguage("eng") }
+    }
+
+    @Test
+    fun `selects the exact track group when two tracks share a language`() = runTest(testDispatcher) {
+        val tracks = listOf(
+            fakeSubtitleTrack(index = 2, language = "eng", title = "English"),
+            fakeSubtitleTrack(index = 5, language = "eng", title = "English (external)"),
+        )
+        every { player.currentTracks } returns fakeTextTracks(2, 5)
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SelectSubtitleTrack(5))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val selectedGroup = trackParamsSlot.captured.overrides.values.single().mediaTrackGroup
+        assertEquals("5", selectedGroup.getFormat(0).id)
     }
 
     @Test
@@ -430,7 +467,7 @@ class PlayerViewModelTest {
 
         val ready = vm.state.value as PlayerUiState.Ready
         assertNull(ready.selectedSubtitleIndex)
-        assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(androidx.media3.common.C.TRACK_TYPE_TEXT))
+        assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
         coVerify(exactly = 0) { subtitlePreferenceStore.savePreferredLanguage(any()) }
     }
 
