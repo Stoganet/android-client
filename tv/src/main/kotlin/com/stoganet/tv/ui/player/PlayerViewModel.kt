@@ -1,6 +1,6 @@
 package com.stoganet.tv.ui.player
 
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -132,7 +132,7 @@ class PlayerViewModel(
     private fun scheduleHideControls() {
         hideControlsJob?.cancel()
         hideControlsJob = viewModelScope.launch {
-            delay(CONTROLS_HIDE_DELAY_MS)
+            delay(CONTROLS_HIDE_DELAY_MS.milliseconds)
             _state.update { s ->
                 if (s is PlayerUiState.Ready && !s.subtitleMenuOpen) s.copy(controlsVisible = false) else s
             }
@@ -223,7 +223,7 @@ class PlayerViewModel(
 
     private fun buildMediaItem(streamUrl: String, tracks: List<SubtitleTrackUi>): MediaItem {
         val subtitleConfigs = tracks.map { track ->
-            MediaItem.SubtitleConfiguration.Builder(Uri.parse("$streamUrl/subtitles/${track.index}"))
+            MediaItem.SubtitleConfiguration.Builder("$streamUrl/subtitles/${track.index}".toUri())
                 .setMimeType(MimeTypes.TEXT_VTT)
                 .setLanguage(track.language)
                 .setLabel(track.title)
@@ -309,7 +309,7 @@ class PlayerViewModel(
         uiTickJob = viewModelScope.launch {
             while (isActive) {
                 updatePlaybackPosition()
-                delay(UI_TICK_INTERVAL_MS)
+                delay(UI_TICK_INTERVAL_MS.milliseconds)
             }
         }
     }
@@ -343,7 +343,6 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        super.onCleared()
         mediaSession.release()
         player.release()
     }
