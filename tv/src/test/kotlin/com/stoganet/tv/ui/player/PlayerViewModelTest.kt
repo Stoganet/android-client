@@ -76,6 +76,9 @@ class PlayerViewModelTest {
         every { player.trackSelectionParameters = capture(trackParamsSlot) } just Runs
         coEvery { subtitlePreferenceStore.current() } returns null
         coEvery { subtitlePreferenceStore.savePreferredLanguage(any()) } just Runs
+        // loadAndPrepare() always fetches detail; default to a successful fetch with no
+        // subtitle tracks so streamUrl-only tests don't need to stub it explicitly.
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
     }
 
     @After fun tearDown() {
@@ -182,14 +185,15 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `transitions to Ready directly when streamUrl provided without fetching`() = runTest(testDispatcher) {
+    fun `transitions to Ready with given streamUrl even when detail fetch fails`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("fail"))
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(vm.state.value is PlayerUiState.Ready)
         verify { player.setMediaItem(any<MediaItem>(), any<Long>()) }
         verify { player.prepare() }
-        coVerify(exactly = 0) { repository.getDetail(any()) }
+        coVerify { repository.getDetail(any()) }
     }
 
     @Test

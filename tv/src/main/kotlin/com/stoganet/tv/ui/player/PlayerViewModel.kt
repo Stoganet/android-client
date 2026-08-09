@@ -176,40 +176,29 @@ class PlayerViewModel(
         player.stop()
     }
 
+    // Always fetches detail, even with a streamUrl already given, since subtitle_tracks only
+    // comes from here. Falls back to the given streamUrl so episodes/resume/failed fetches still play.
     private fun loadAndPrepare() {
-        val url = streamUrl
-        if (url != null) {
+        viewModelScope.launch {
+            val play = repository.getDetail(id).getOrNull()?.play
+            val url = streamUrl ?: play?.streamUrl
+            if (url == null) {
+                _state.update { PlayerUiState.Error }
+                return@launch
+            }
+            val tracks = play?.subtitleTracks.orEmpty().map {
+                SubtitleTrackUi(it.index, it.language, it.title, it.isDefault)
+            }
             currentStreamUrl = url
-            currentSubtitleTracks = emptyList()
-            player.setMediaItem(MediaItem.fromUri(url), positionMs)
+            currentSubtitleTracks = tracks
+            player.setMediaItem(buildMediaItem(url, tracks), positionMs)
             player.prepare()
             player.play()
-            emitReady(positionMs = positionMs, tracks = emptyList(), selectedIndex = null)
-            return
-        }
-        viewModelScope.launch {
-            repository.getDetail(id)
-                .onSuccess { detail ->
-                    val play = detail.play
-                    if (play == null) {
-                        _state.update { PlayerUiState.Error }
-                        return@onSuccess
-                    }
-                    currentStreamUrl = play.streamUrl
-                    val tracks = play.subtitleTracks.map {
-                        SubtitleTrackUi(it.index, it.language, it.title, it.isDefault)
-                    }
-                    currentSubtitleTracks = tracks
-                    player.setMediaItem(buildMediaItem(play.streamUrl, tracks), positionMs)
-                    player.prepare()
-                    player.play()
-                    val preferredLanguage = subtitlePreferenceStore.current()
-                    val initialTrack = tracks.firstOrNull { it.language == preferredLanguage }
-                        ?: tracks.firstOrNull { it.isDefault }
-                    applySubtitleTrack(tracks, initialTrack?.index)
-                    emitReady(positionMs = positionMs, tracks = tracks, selectedIndex = initialTrack?.index)
-                }
-                .onFailure { _state.update { PlayerUiState.Error } }
+            val preferredLanguage = subtitlePreferenceStore.current()
+            val initialTrack = tracks.firstOrNull { it.language == preferredLanguage }
+                ?: tracks.firstOrNull { it.isDefault }
+            applySubtitleTrack(tracks, initialTrack?.index)
+            emitReady(positionMs = positionMs, tracks = tracks, selectedIndex = initialTrack?.index)
         }
     }
 
