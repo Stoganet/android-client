@@ -1,5 +1,6 @@
 package com.stoganet.tv.ui.player
 
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -113,14 +114,7 @@ private fun ReadyPlayerContent(
                 .fillMaxSize()
                 .focusRequester(surfaceFocusRequester)
                 .focusable()
-                .onKeyEvent { keyEvent ->
-                    if (keyEvent.type == KeyEventType.KeyDown && !state.controlsVisible) {
-                        onIntent(PlayerIntent.ShowControls)
-                        true
-                    } else {
-                        false
-                    }
-                },
+                .onKeyEvent { keyEvent -> handlePlayerKeyEvent(keyEvent, state.controlsVisible, onIntent) },
             factory = { context ->
                 PlayerView(context).also { pv ->
                     pv.useController = false
@@ -153,6 +147,39 @@ private fun ReadyPlayerContent(
                 state.controlsVisible -> playPauseFocusRequester.requestFocus()
                 else -> surfaceFocusRequester.requestFocus()
             }
+        }
+    }
+}
+
+internal fun handlePlayerKeyEvent(
+    keyEvent: androidx.compose.ui.input.key.KeyEvent,
+    controlsVisible: Boolean,
+    onIntent: (PlayerIntent) -> Unit,
+): Boolean {
+    if (keyEvent.type != KeyEventType.KeyDown) {
+        return false
+    }
+    return when (keyEvent.nativeKeyEvent.keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+            onIntent(PlayerIntent.TogglePlayPause)
+            true
+        }
+
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+            onIntent(PlayerIntent.SeekForward)
+            true
+        }
+
+        KeyEvent.KEYCODE_MEDIA_REWIND -> {
+            onIntent(PlayerIntent.SeekBackward)
+            true
+        }
+
+        else -> if (!controlsVisible) {
+            onIntent(PlayerIntent.ShowControls)
+            true
+        } else {
+            false
         }
     }
 }

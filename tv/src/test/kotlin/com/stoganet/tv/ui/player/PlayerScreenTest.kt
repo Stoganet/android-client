@@ -20,12 +20,15 @@ import com.stoganet.tv.R
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.collections.immutable.persistentListOf
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import android.view.KeyEvent as NativeKeyEvent
+import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -134,5 +137,148 @@ class PlayerScreenTest {
         waitForIdle()
 
         assertTrue(backCalled)
+    }
+
+    private fun composeKeyEvent(nativeKeyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN) =
+        ComposeKeyEvent(NativeKeyEvent(action, nativeKeyCode))
+
+    @Test
+    fun handlePlayerKeyEvent_mediaPlayPause_togglesPlayPause() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaPlay_togglesPlayPause() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaPause_togglesPlayPause() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PAUSE),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaPlayPause_withHiddenControls_stillTogglesInsteadOfJustShowing() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
+            controlsVisible = false,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaFastForward_withHiddenControls_stillSeeksInsteadOfJustShowing() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD),
+            controlsVisible = false,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.SeekForward), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaFastForward_seeksForward() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.SeekForward), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_mediaRewind_seeksBackward() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_REWIND),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.SeekBackward), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_keyUp_isIgnored() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, action = NativeKeyEvent.ACTION_UP),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertFalse(consumed)
+        assertTrue(intents.isEmpty())
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_otherKeyWithHiddenControls_showsControls() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_DOWN),
+            controlsVisible = false,
+            onIntent = { intents += it },
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.ShowControls), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_otherKeyWithVisibleControls_isNotConsumed() {
+        val intents = mutableListOf<PlayerIntent>()
+
+        val consumed = handlePlayerKeyEvent(
+            composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_DOWN),
+            controlsVisible = true,
+            onIntent = { intents += it },
+        )
+
+        assertFalse(consumed)
+        assertTrue(intents.isEmpty())
     }
 }
