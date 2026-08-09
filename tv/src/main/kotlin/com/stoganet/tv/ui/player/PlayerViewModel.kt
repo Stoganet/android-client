@@ -1,13 +1,17 @@
 package com.stoganet.tv.ui.player
 
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.listenTo
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -20,7 +24,9 @@ import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.net.BASE_URL
 import com.stoganet.core.data.net.performTokenRefresh
 import com.stoganet.core.data.playback.PlaybackRepository
+import com.stoganet.core.data.player.SubtitlePreferenceStore
 import com.stoganet.tv.StoganetApp
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -39,6 +45,7 @@ class PlayerViewModel(
     private val id: String,
     private val repository: DetailRepository,
     private val playbackRepository: PlaybackRepository,
+    private val subtitlePreferenceStore: SubtitlePreferenceStore,
     val player: ExoPlayer,
     private val mediaSession: MediaSession,
     private val refreshTokens: suspend () -> Boolean,
@@ -50,7 +57,11 @@ class PlayerViewModel(
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
     private var currentStreamUrl: String? = streamUrl
+    private var currentSubtitleTracks: List<SubtitleTrackUi> = emptyList()
+    private var desiredSubtitleIndex: Int? = null
     private var tickJob: Job? = null
+    private var uiTickJob: Job? = null
+    private var hideControlsJob: Job? = null
     private var isExiting = false
     private var hasRetriedAfterAuthError = false
 
@@ -60,15 +71,22 @@ class PlayerViewModel(
                 Player.EVENT_IS_PLAYING_CHANGED,
                 Player.EVENT_PLAYBACK_STATE_CHANGED,
                 Player.EVENT_PLAYER_ERROR,
+                Player.EVENT_TRACKS_CHANGED,
             ) { events ->
                 if (events.contains(Player.EVENT_PLAYER_ERROR)) {
                     handlePlayerError()
                 }
+                if (events.contains(Player.EVENT_TRACKS_CHANGED)) {
+                    applyDesiredSubtitleTrack()
+                }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     if (isPlaying) {
                         startTick()
+                        startUiTick()
                     } else {
                         stopTick()
+                        stopUiTick()
+                        updatePlaybackPosition()
                         if (!isExiting) reportProgress(played = false)
                     }
                 }
@@ -83,44 +101,151 @@ class PlayerViewModel(
     fun onIntent(intent: PlayerIntent) {
         when (intent) {
             PlayerIntent.Exit -> exit()
+            PlayerIntent.TogglePlayPause -> togglePlayPause()
+            PlayerIntent.SeekBackward -> seekBy(-SEEK_INCREMENT_MS)
+            PlayerIntent.SeekForward -> seekBy(SEEK_INCREMENT_MS)
+            PlayerIntent.ShowControls -> showControls()
+            PlayerIntent.OpenSubtitleMenu -> openSubtitleMenu()
+            PlayerIntent.CloseSubtitleMenu -> closeSubtitleMenu()
+            is PlayerIntent.SelectSubtitleTrack -> selectSubtitleTrack(intent.index)
         }
+    }
+
+    private fun togglePlayPause() {
+        if (player.isPlaying) player.pause() else player.play()
+        updatePlaybackPosition()
+        showControls()
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        val target = (player.currentPosition + deltaMs).coerceIn(0, player.duration.coerceAtLeast(0))
+        player.seekTo(target)
+        updatePlaybackPosition()
+        showControls()
+    }
+
+    private fun showControls() {
+        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(controlsVisible = true) else s }
+        scheduleHideControls()
+    }
+
+    private fun scheduleHideControls() {
+        hideControlsJob?.cancel()
+        hideControlsJob = viewModelScope.launch {
+            delay(CONTROLS_HIDE_DELAY_MS.milliseconds)
+            _state.update { s ->
+                if (s is PlayerUiState.Ready && !s.subtitleMenuOpen) s.copy(controlsVisible = false) else s
+            }
+        }
+    }
+
+    private fun openSubtitleMenu() {
+        hideControlsJob?.cancel()
+        _state.update { s ->
+            if (s is PlayerUiState.Ready) s.copy(subtitleMenuOpen = true, controlsVisible = true) else s
+        }
+    }
+
+    private fun closeSubtitleMenu() {
+        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(subtitleMenuOpen = false) else s }
+        scheduleHideControls()
+    }
+
+    private fun selectSubtitleTrack(index: Int?) {
+        val ready = _state.value as? PlayerUiState.Ready ?: return
+        desiredSubtitleIndex = index
+        applyDesiredSubtitleTrack()
+        val language = ready.subtitleTracks.firstOrNull { it.index == index }?.language
+        if (language != null) {
+            viewModelScope.launch { subtitlePreferenceStore.savePreferredLanguage(language) }
+        }
+        _state.update { s ->
+            if (s is PlayerUiState.Ready) s.copy(selectedSubtitleIndex = index, subtitleMenuOpen = false) else s
+        }
+        scheduleHideControls()
+    }
+
+    // Matches by Format.id, not language, so same-language tracks (muxed + external .srt) stay
+    // distinguishable. Re-run on EVENT_TRACKS_CHANGED since tracks aren't known right after prepare().
+    private fun applyDesiredSubtitleTrack() {
+        val target = desiredSubtitleIndex
+        val textGroup = target?.let { idx ->
+            player.currentTracks.groups.firstOrNull { group ->
+                group.type == C.TRACK_TYPE_TEXT &&
+                    (0 until group.length).any { i -> group.getTrackFormat(i).id == idx.toString() }
+            }
+        }
+        val builder = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, textGroup == null)
+        if (textGroup != null) {
+            builder.addOverride(TrackSelectionOverride(textGroup.mediaTrackGroup, 0))
+        }
+        player.trackSelectionParameters = builder.build()
     }
 
     private fun exit() {
         isExiting = true
         stopTick()
+        stopUiTick()
         viewModelScope.launch {
             withContext(NonCancellable) { reportProgressSuspend(played = false) }
         }
         player.stop()
     }
 
+    // Always fetches detail, even with a streamUrl already given, since subtitle_tracks only
+    // comes from here. Falls back to the given streamUrl so episodes/resume/failed fetches still play.
     private fun loadAndPrepare() {
-        val url = streamUrl
-        if (url != null) {
+        viewModelScope.launch {
+            val play = repository.getDetail(id).getOrNull()?.play
+            val url = streamUrl ?: play?.streamUrl
+            if (url == null) {
+                _state.update { PlayerUiState.Error }
+                return@launch
+            }
+            val tracks = play?.subtitleTracks.orEmpty().map {
+                SubtitleTrackUi(it.index, it.language, it.title, it.isDefault)
+            }
             currentStreamUrl = url
-            player.setMediaItem(MediaItem.fromUri(url), positionMs)
+            currentSubtitleTracks = tracks
+            player.setMediaItem(buildMediaItem(url, tracks), positionMs)
             player.prepare()
             player.play()
-            _state.update { PlayerUiState.Ready }
-            return
+            val preferredLanguage = subtitlePreferenceStore.current()
+            val initialTrack = tracks.firstOrNull { it.language == preferredLanguage }
+                ?: tracks.firstOrNull { it.isDefault }
+            desiredSubtitleIndex = initialTrack?.index
+            applyDesiredSubtitleTrack()
+            emitReady(positionMs = positionMs, tracks = tracks, selectedIndex = initialTrack?.index)
         }
-        viewModelScope.launch {
-            repository.getDetail(id)
-                .onSuccess { detail ->
-                    val play = detail.play
-                    if (play == null) {
-                        _state.update { PlayerUiState.Error }
-                        return@onSuccess
-                    }
-                    currentStreamUrl = play.streamUrl
-                    player.setMediaItem(MediaItem.fromUri(play.streamUrl), positionMs)
-                    player.prepare()
-                    player.play()
-                    _state.update { PlayerUiState.Ready }
-                }
-                .onFailure { _state.update { PlayerUiState.Error } }
+    }
+
+    private fun buildMediaItem(streamUrl: String, tracks: List<SubtitleTrackUi>): MediaItem {
+        val subtitleConfigs = tracks.map { track ->
+            MediaItem.SubtitleConfiguration.Builder("$streamUrl/subtitles/${track.index}".toUri())
+                .setMimeType(MimeTypes.TEXT_VTT)
+                .setLanguage(track.language)
+                .setLabel(track.title)
+                .setId(track.index.toString())
+                .build()
         }
+        return MediaItem.Builder().setUri(streamUrl).setSubtitleConfigurations(subtitleConfigs).build()
+    }
+
+    private fun emitReady(positionMs: Long, tracks: List<SubtitleTrackUi>, selectedIndex: Int?) {
+        _state.update {
+            PlayerUiState.Ready(
+                isPlaying = true,
+                positionMs = positionMs,
+                durationMs = player.duration.coerceAtLeast(0),
+                controlsVisible = true,
+                subtitleTracks = tracks.toImmutableList(),
+                selectedSubtitleIndex = selectedIndex,
+                subtitleMenuOpen = false,
+            )
+        }
+        scheduleHideControls()
     }
 
     // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
@@ -138,10 +263,16 @@ class PlayerViewModel(
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
-            player.setMediaItem(MediaItem.fromUri(url), resumeMs)
+            player.setMediaItem(buildMediaItem(url, currentSubtitleTracks), resumeMs)
             player.prepare()
             player.play()
-            _state.update { PlayerUiState.Ready }
+            val ready = _state.value as? PlayerUiState.Ready
+            emitReady(
+                positionMs = resumeMs,
+                tracks = currentSubtitleTracks,
+                selectedIndex = ready?.selectedSubtitleIndex,
+            )
+            applyDesiredSubtitleTrack()
         }
     }
 
@@ -174,6 +305,34 @@ class PlayerViewModel(
         tickJob = null
     }
 
+    private fun startUiTick() {
+        uiTickJob = viewModelScope.launch {
+            while (isActive) {
+                updatePlaybackPosition()
+                delay(UI_TICK_INTERVAL_MS.milliseconds)
+            }
+        }
+    }
+
+    private fun stopUiTick() {
+        uiTickJob?.cancel()
+        uiTickJob = null
+    }
+
+    private fun updatePlaybackPosition() {
+        _state.update { s ->
+            if (s is PlayerUiState.Ready) {
+                s.copy(
+                    isPlaying = player.isPlaying,
+                    positionMs = player.currentPosition,
+                    durationMs = player.duration.coerceAtLeast(0),
+                )
+            } else {
+                s
+            }
+        }
+    }
+
     private fun reportProgress(played: Boolean) {
         viewModelScope.launch { reportProgressSuspend(played) }
     }
@@ -184,13 +343,15 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        super.onCleared()
         mediaSession.release()
         player.release()
     }
 
     companion object {
         private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
+        private const val UI_TICK_INTERVAL_MS = 500L
+        private const val CONTROLS_HIDE_DELAY_MS = 3_000L
+        private const val SEEK_INCREMENT_MS = 10_000L
         private const val UNAUTHORIZED_STATUS_CODE = 401
         private const val MAX_CAUSE_CHAIN_DEPTH = 10
 
@@ -215,6 +376,7 @@ class PlayerViewModel(
                         id = id,
                         repository = app.services.detailRepository,
                         playbackRepository = app.services.playbackRepository,
+                        subtitlePreferenceStore = app.services.subtitlePreferenceStore,
                         player = player,
                         mediaSession = mediaSession,
                         refreshTokens = {

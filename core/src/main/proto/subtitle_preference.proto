@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+option java_package = "com.stoganet.core.proto";
+option java_multiple_files = true;
+
+message SubtitlePreference {
+    string preferred_language = 1;
+}

@@ -54,22 +54,23 @@ class DetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun fakeDetail(play: PlayInfo? = PlayInfo(streamUrl = "https://api.stoganet.com/stream/jf-uuid")) =
-        LibraryDetail(
-            id = "tmdb:movie:603",
-            title = "Test Movie",
-            year = 1999,
-            type = MediaType.MOVIE,
-            poster = "https://img/poster",
-            backdrop = "https://img/backdrop",
-            overview = "A computer hacker learns the truth.",
-            state = if (play != null) MediaState.PLAYABLE else MediaState.DOWNLOADING,
-            genres = listOf("Action", "Sci-Fi"),
-            runtime = 136,
-            cast = listOf(CastMember(name = "Test Actor", role = "Actor")),
-            seasons = emptyList(),
-            play = play,
-        )
+    private fun fakeDetail(
+        play: PlayInfo? = PlayInfo(streamUrl = "https://api.stoganet.com/stream/jf-uuid", subtitleTracks = emptyList()),
+    ) = LibraryDetail(
+        id = "tmdb:movie:603",
+        title = "Test Movie",
+        year = 1999,
+        type = MediaType.MOVIE,
+        poster = "https://img/poster",
+        backdrop = "https://img/backdrop",
+        overview = "A computer hacker learns the truth.",
+        state = if (play != null) MediaState.PLAYABLE else MediaState.DOWNLOADING,
+        genres = listOf("Action", "Sci-Fi"),
+        runtime = 136,
+        cast = listOf(CastMember(name = "Test Actor", role = "Actor")),
+        seasons = emptyList(),
+        play = play,
+    )
 
     @Test
     fun `loads Content on success`() = runTest {

@@ -10,6 +10,7 @@ import com.stoganet.core.data.net.StoganetApi
 import com.stoganet.core.data.net.buildHttpClient
 import com.stoganet.core.data.net.buildRefreshHttpClient
 import com.stoganet.core.data.playback.PlaybackRepository
+import com.stoganet.core.data.player.SubtitlePreferenceStore
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
 import io.ktor.client.HttpClient
@@ -19,6 +20,8 @@ class ServiceLocator(context: Context) {
     private val appContext: Context = context.applicationContext
 
     val tokenStore: TokenStore by lazy { TokenStore.create(appContext) }
+
+    val subtitlePreferenceStore: SubtitlePreferenceStore by lazy { SubtitlePreferenceStore.create(appContext) }
 
     val httpClient: HttpClient by lazy { buildHttpClient(tokenStore) }
 
