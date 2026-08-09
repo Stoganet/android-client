@@ -50,7 +50,15 @@ fun PlayerScreen(
     player: ExoPlayer? = null,
     onIntent: (PlayerIntent) -> Unit = {},
 ) {
-    BackHandler(onBack = onBack)
+    BackHandler(
+        onBack = {
+            if (state is PlayerUiState.Ready && state.subtitleMenuOpen) {
+                onIntent(PlayerIntent.CloseSubtitleMenu)
+            } else {
+                onBack()
+            }
+        },
+    )
 
     when (state) {
         PlayerUiState.Loading -> Box(
