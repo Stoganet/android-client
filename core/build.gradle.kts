@@ -14,6 +14,17 @@ android {
         consumerProguardFiles("consumer-rules.pro")
     }
 
+    buildTypes {
+        debug {
+            // 10.0.2.2 is the AVD's alias for the host loopback interface and points at a
+            // locally running api-proxy (`docker compose up` in the api-proxy repo).
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+        }
+        release {
+            buildConfigField("String", "API_BASE_URL", "\"https://api.stoganet.com/\"")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

@@ -24,7 +24,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
-const val BASE_URL = "https://api.stoganet.com/"
+const val BASE_URL = BuildConfig.API_BASE_URL
 
 private const val TAG = "HttpClientFactory"
 private const val CONNECT_TIMEOUT_SECONDS = 10L

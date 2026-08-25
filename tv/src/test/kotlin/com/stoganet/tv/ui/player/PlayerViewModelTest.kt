@@ -123,10 +123,12 @@ class PlayerViewModelTest {
         )
 
     // Mirrors what ExoPlayer reports once a media source with sideloaded subtitles is prepared:
-    // one text TrackGroup per SubtitleConfiguration, identified by the Format.id we set on it.
+    // one text TrackGroup per SubtitleConfiguration. MergingMediaSource prefixes each merged
+    // Format.id with "childIndex:", so the id we set via .setId() only survives as a suffix so
+    // this must be reproduced here or tests won't catch a regression to exact-id matching.
     private fun fakeTextTracks(vararg indices: Int): Tracks {
-        val groups = indices.map { idx ->
-            val format = Format.Builder().setId(idx.toString()).setSampleMimeType(MimeTypes.TEXT_VTT).build()
+        val groups = indices.mapIndexed { childIndex, idx ->
+            val format = Format.Builder().setId("$childIndex:$idx").setSampleMimeType(MimeTypes.TEXT_VTT).build()
             Tracks.Group(TrackGroup(format), false, intArrayOf(C.FORMAT_HANDLED), booleanArrayOf(false))
         }
         return Tracks(groups)
@@ -451,7 +453,7 @@ class PlayerViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val selectedGroup = trackParamsSlot.captured.overrides.values.single().mediaTrackGroup
-        assertEquals("5", selectedGroup.getFormat(0).id)
+        assertEquals("1:5", selectedGroup.getFormat(0).id)
     }
 
     @Test

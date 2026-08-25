@@ -166,13 +166,18 @@ class PlayerViewModel(
     }
 
     // Matches by Format.id, not language, so same-language tracks (muxed + external .srt) stay
-    // distinguishable. Re-run on EVENT_TRACKS_CHANGED since tracks aren't known right after prepare().
+    // distinguishable. MergingMediaSource prefixes each merged Format.id with "childIndex:", so
+    // only the suffix (the id we set via .setId() in buildMediaItem, always a plain track.index
+    // int with no colon of its own) is compared. Re-run on EVENT_TRACKS_CHANGED since tracks
+    // aren't known right after prepare().
     private fun applyDesiredSubtitleTrack() {
         val target = desiredSubtitleIndex
         val textGroup = target?.let { idx ->
             player.currentTracks.groups.firstOrNull { group ->
                 group.type == C.TRACK_TYPE_TEXT &&
-                    (0 until group.length).any { i -> group.getTrackFormat(i).id == idx.toString() }
+                    (0 until group.length).any { i ->
+                        group.getTrackFormat(i).id?.substringAfterLast(':') == idx.toString()
+                    }
             }
         }
         val builder = player.trackSelectionParameters.buildUpon()
