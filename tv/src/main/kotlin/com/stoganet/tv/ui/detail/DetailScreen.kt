@@ -54,7 +54,7 @@ private const val PANEL_WIDTH_FRACTION = 0.52f
 fun DetailScreen(
     state: DetailUiState,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -97,7 +97,7 @@ fun DetailScreen(
 private fun DetailContent(
     state: DetailUiState.Content,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -152,7 +152,7 @@ private fun DetailMetadataPanel(
     state: DetailUiState.Content,
     focusRequester: FocusRequester,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -199,7 +199,7 @@ private fun DetailMetadataPanel(
                         focusRequester = focusRequester,
                         onNavigateToPlayer = {
                             val url = state.streamUrl ?: return@DetailActionButton
-                            onNavigateToPlayer(url, 0L)
+                            onNavigateToPlayer(state.id, url, 0L)
                         },
                         onRequestMovie = { onIntent(DetailIntent.RequestMovie) },
                     )
@@ -236,14 +236,16 @@ private fun TvActions(
     state: DetailUiState.Content,
     focusRequester: FocusRequester,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
 ) {
     val chipFocusRequester = remember { FocusRequester() }
     Column {
         if (state.resume != null) {
             val resumeDesc = stringResource(R.string.detail_resume_content_description, state.resume.title)
             Button(
-                onClick = { onNavigateToPlayer(state.resume.streamUrl, state.resume.positionMs) },
+                onClick = {
+                    onNavigateToPlayer(state.resume.episodeId, state.resume.streamUrl, state.resume.positionMs)
+                },
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .semantics { contentDescription = resumeDesc },
@@ -297,12 +299,15 @@ private fun SeasonChips(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun EpisodeRow(episode: EpisodeUiState, onNavigateToPlayer: (streamUrl: String, positionMs: Long) -> Unit) {
+private fun EpisodeRow(
+    episode: EpisodeUiState,
+    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
+) {
     val desc = stringResource(R.string.detail_episode_content_description, episode.number, episode.title)
     Button(
         onClick = {
             val url = episode.streamUrl ?: return@Button
-            onNavigateToPlayer(url, episode.positionMs)
+            onNavigateToPlayer(episode.id, url, episode.positionMs)
         },
         enabled = episode.streamUrl != null,
         modifier = Modifier
@@ -416,13 +421,13 @@ private fun CastSection(cast: ImmutableList<CastMemberUiState>) {
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewLoading() {
-    DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _ -> })
+    DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _, _ -> })
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewError() {
-    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _ -> })
+    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _, _ -> })
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
@@ -430,6 +435,7 @@ private fun PreviewError() {
 private fun PreviewMovieContent() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "movie-1",
             title = "Test Movie",
             year = 1999,
             mediaType = MediaType.MOVIE,
@@ -448,7 +454,7 @@ private fun PreviewMovieContent() {
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }
 
@@ -457,6 +463,7 @@ private fun PreviewMovieContent() {
 private fun PreviewTvWithSeasons() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "show-1",
             title = "Test Show",
             year = 2008,
             mediaType = MediaType.TV,
@@ -482,7 +489,7 @@ private fun PreviewTvWithSeasons() {
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }
 
@@ -491,6 +498,7 @@ private fun PreviewTvWithSeasons() {
 private fun PreviewTvWithEpisodes() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "show-1",
             title = "Test Show",
             year = 2008,
             mediaType = MediaType.TV,
@@ -522,7 +530,7 @@ private fun PreviewTvWithEpisodes() {
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }
 
@@ -531,6 +539,7 @@ private fun PreviewTvWithEpisodes() {
 private fun PreviewNotPlayable() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "movie-1",
             title = "Test Movie",
             year = 1999,
             mediaType = MediaType.MOVIE,
@@ -546,7 +555,7 @@ private fun PreviewNotPlayable() {
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }
 
@@ -555,6 +564,7 @@ private fun PreviewNotPlayable() {
 private fun PreviewRequestable() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "sequel-1",
             title = "Test Sequel",
             year = 2026,
             mediaType = MediaType.MOVIE,
@@ -570,7 +580,7 @@ private fun PreviewRequestable() {
             mediaState = MediaState.REQUESTABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }
 
@@ -579,6 +589,7 @@ private fun PreviewRequestable() {
 private fun PreviewDownloading() {
     DetailScreen(
         state = DetailUiState.Content(
+            id = "sequel-1",
             title = "Test Sequel",
             year = 2026,
             mediaType = MediaType.MOVIE,
@@ -594,6 +605,6 @@ private fun PreviewDownloading() {
             mediaState = MediaState.DOWNLOADING,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _ -> },
+        onNavigateToPlayer = { _, _, _ -> },
     )
 }

@@ -48,6 +48,7 @@ sealed interface DetailUiState {
 
     @Immutable
     data class Content(
+        val id: String,
         val title: String,
         val year: Int,
         val mediaType: MediaType,

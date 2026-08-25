@@ -108,6 +108,7 @@ class DetailViewModel(
     }
 
     private fun LibraryDetail.toUiState() = DetailUiState.Content(
+        id = this@DetailViewModel.id,
         title = title,
         year = year,
         mediaType = type,

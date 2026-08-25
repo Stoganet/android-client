@@ -131,8 +131,8 @@ fun AppNavHost() {
             DetailScreen(
                 state = state,
                 onIntent = vm::onIntent,
-                onNavigateToPlayer = { streamUrl, positionMs ->
-                    navController.navigate(AppRoutes.player(id, streamUrl, positionMs))
+                onNavigateToPlayer = { playId, streamUrl, positionMs ->
+                    navController.navigate(AppRoutes.player(playId, streamUrl, positionMs))
                 },
             )
         }
