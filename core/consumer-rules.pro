@@ -20,3 +20,6 @@
 -keep class com.google.crypto.tink.** { *; }
 -keep class com.google.protobuf.** { *; }
 -dontwarn com.google.errorprone.annotations.**
+
+# proto messages reflect on their fields at runtime so R8 renaming crashes release builds
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }

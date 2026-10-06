@@ -16,9 +16,9 @@ android {
 
     buildTypes {
         debug {
-            // 10.0.2.2 is the AVD's alias for the host loopback interface and points at a
-            // locally running api-proxy (`docker compose up` in the api-proxy repo).
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+            // 10.0.2.2 = emulator host loopback (local api-proxy), set API_BASE_URL for real devices
+            val baseUrl = System.getenv("API_BASE_URL") ?: "http://10.0.2.2:8080/"
+            buildConfigField("String", "API_BASE_URL", "\"$baseUrl\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://api.stoganet.com/\"")

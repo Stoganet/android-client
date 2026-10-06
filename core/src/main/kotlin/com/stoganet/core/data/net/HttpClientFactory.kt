@@ -14,6 +14,7 @@ import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -30,6 +31,13 @@ private const val TAG = "HttpClientFactory"
 private const val CONNECT_TIMEOUT_SECONDS = 10L
 private const val READ_TIMEOUT_SECONDS = 15L
 private const val WRITE_TIMEOUT_SECONDS = 15L
+
+// default logger is SLF4J, which is a no-op on Android
+private object AndroidKtorLogger : Logger {
+    override fun log(message: String) {
+        Log.d("Ktor", message)
+    }
+}
 
 fun buildHttpClient(tokenStore: TokenStore): HttpClient = HttpClient(OkHttp) {
     configurePlugins(tokenStore, BASE_URL)
@@ -80,7 +88,10 @@ internal fun HttpClientConfig<*>.configurePlugins(tokenStore: TokenStore, baseUr
         }
     }
     if (BuildConfig.DEBUG) {
-        install(Logging) { level = LogLevel.INFO }
+        install(Logging) {
+            logger = AndroidKtorLogger
+            level = LogLevel.INFO
+        }
     }
 }
 
@@ -92,7 +103,10 @@ fun buildRefreshHttpClient(): HttpClient = HttpClient(OkHttp) {
         json(Json { ignoreUnknownKeys = true })
     }
     if (BuildConfig.DEBUG) {
-        install(Logging) { level = LogLevel.INFO }
+        install(Logging) {
+            logger = AndroidKtorLogger
+            level = LogLevel.INFO
+        }
     }
 }
 
