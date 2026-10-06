@@ -64,5 +64,6 @@ sealed interface DetailUiState {
         val mediaState: MediaState,
         val episodes: ImmutableList<EpisodeUiState> = persistentListOf(),
         val selectedSeason: Int? = null,
+        val positionMs: Long = 0L,
     ) : DetailUiState
 }

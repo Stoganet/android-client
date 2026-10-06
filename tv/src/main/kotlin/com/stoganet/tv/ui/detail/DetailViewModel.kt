@@ -122,6 +122,7 @@ class DetailViewModel(
         streamUrl = play?.streamUrl,
         isPlayable = state == MediaState.PLAYABLE && play != null,
         mediaState = state,
+        positionMs = progress?.takeUnless { it.played }?.positionMs ?: 0L,
     )
 
     companion object {

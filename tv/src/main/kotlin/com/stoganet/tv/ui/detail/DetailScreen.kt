@@ -146,7 +146,6 @@ private fun DetailBackdrop(backdropUrl: String?) {
 }
 
 @Suppress("LongMethod")
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun DetailMetadataPanel(
     state: DetailUiState.Content,
@@ -200,10 +199,11 @@ private fun DetailMetadataPanel(
                         title = state.title,
                         mediaState = state.mediaState,
                         isPlayable = state.isPlayable,
+                        positionMs = state.positionMs,
                         focusRequester = focusRequester,
                         onNavigateToPlayer = {
                             val url = state.streamUrl ?: return@DetailActionButton
-                            onNavigateToPlayer(state.id, url, 0L)
+                            onNavigateToPlayer(state.id, url, state.positionMs)
                         },
                         onRequestMovie = { onIntent(DetailIntent.RequestMovie) },
                     )
@@ -245,7 +245,12 @@ private fun TvActions(
     val chipFocusRequester = remember { FocusRequester() }
     Column {
         if (state.resume != null) {
-            val resumeDesc = stringResource(R.string.detail_resume_content_description, state.resume.title)
+            val isResume = state.resume.positionMs > 0
+            val resumeDesc = if (isResume) {
+                stringResource(R.string.detail_resume_content_description, state.resume.title)
+            } else {
+                stringResource(R.string.detail_play_content_description, state.resume.title)
+            }
             Button(
                 onClick = {
                     onNavigateToPlayer(state.resume.episodeId, state.resume.streamUrl, state.resume.positionMs)
@@ -253,7 +258,9 @@ private fun TvActions(
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .semantics { contentDescription = resumeDesc },
-            ) { Text(stringResource(R.string.detail_resume_button)) }
+            ) {
+                Text(stringResource(if (isResume) R.string.detail_resume_button else R.string.detail_play_button))
+            }
             Spacer(Modifier.height(16.dp))
         }
 
@@ -345,6 +352,7 @@ private fun DetailActionButton(
     title: String,
     mediaState: MediaState,
     isPlayable: Boolean,
+    positionMs: Long,
     focusRequester: FocusRequester,
     onNavigateToPlayer: () -> Unit,
     onRequestMovie: () -> Unit,
@@ -355,8 +363,13 @@ private fun DetailActionButton(
     val onClick: () -> Unit
     when (mediaState) {
         MediaState.PLAYABLE -> if (isPlayable) {
-            label = stringResource(R.string.detail_play_button)
-            desc = stringResource(R.string.detail_play_content_description, title)
+            if (positionMs > 0) {
+                label = stringResource(R.string.detail_resume_button)
+                desc = stringResource(R.string.detail_resume_content_description, title)
+            } else {
+                label = stringResource(R.string.detail_play_button)
+                desc = stringResource(R.string.detail_play_content_description, title)
+            }
             enabled = true
             onClick = onNavigateToPlayer
         } else {

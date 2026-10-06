@@ -359,4 +359,79 @@ class DetailScreenTest {
         onNodeWithText("Test Show").assertIsDisplayed()
         onNodeWithText("0").assertDoesNotExist()
     }
+
+    private fun tvResume(positionMs: Long) = ResumeUiState(
+        seasonNumber = 1,
+        episodeNumber = 1,
+        episodeId = "ep-1",
+        title = "Pilot",
+        streamUrl = "https://stream.example.com/ep-1",
+        positionMs = positionMs,
+    )
+
+    @Test
+    fun contentState_tv_neverStarted_showsPlayNotResume() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeTvContent().copy(resume = tvResume(positionMs = 0L)),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, _ -> },
+            )
+        }
+
+        onNodeWithContentDescription(str(R.string.detail_play_content_description, "Pilot")).assertIsDisplayed()
+        onNodeWithContentDescription(str(R.string.detail_resume_content_description, "Pilot")).assertDoesNotExist()
+    }
+
+    @Test
+    fun contentState_tv_partiallyWatched_showsResume() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeTvContent().copy(resume = tvResume(positionMs = 120_000L)),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, _ -> },
+            )
+        }
+
+        onNodeWithContentDescription(str(R.string.detail_resume_content_description, "Pilot")).assertIsDisplayed()
+        onNodeWithContentDescription(str(R.string.detail_play_content_description, "Pilot")).assertDoesNotExist()
+    }
+
+    @Test
+    fun contentState_movie_neverStarted_showsPlayAndStartsFromZero() = runComposeUiTest {
+        var position: Long? = null
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent(),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, pos -> position = pos },
+            )
+        }
+
+        val desc = str(R.string.detail_play_content_description, "Test Movie")
+        onNodeWithContentDescription(desc).requestFocus()
+        onNodeWithContentDescription(desc).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(0L, position)
+    }
+
+    @Test
+    fun contentState_movie_partiallyWatched_showsResumeAndPassesPosition() = runComposeUiTest {
+        var position: Long? = null
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent().copy(positionMs = 90_000L),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, pos -> position = pos },
+            )
+        }
+
+        val desc = str(R.string.detail_resume_content_description, "Test Movie")
+        onNodeWithContentDescription(desc).requestFocus()
+        onNodeWithContentDescription(desc).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(90_000L, position)
+    }
 }

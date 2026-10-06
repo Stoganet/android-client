@@ -7,6 +7,7 @@ import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.Season
+import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
@@ -89,6 +90,35 @@ class DetailViewModelTest {
         assertEquals("Test Actor", state.cast[0].name)
         assertTrue(state.isPlayable)
         assertEquals("https://api.stoganet.com/stream/jf-uuid", state.streamUrl)
+    }
+
+    @Test
+    fun `movie with unfinished progress exposes resume position`() = runTest {
+        coEvery { repository.getDetail("id1") } returns
+            Result.success(fakeDetail().copy(progress = WatchProgress(positionMs = 90_000L, played = false)))
+
+        val state = newVm().state.value as DetailUiState.Content
+
+        assertEquals(90_000L, state.positionMs)
+    }
+
+    @Test
+    fun `movie never started has no resume position`() = runTest {
+        coEvery { repository.getDetail("id1") } returns Result.success(fakeDetail())
+
+        val state = newVm().state.value as DetailUiState.Content
+
+        assertEquals(0L, state.positionMs)
+    }
+
+    @Test
+    fun `finished movie has no resume position`() = runTest {
+        coEvery { repository.getDetail("id1") } returns
+            Result.success(fakeDetail().copy(progress = WatchProgress(positionMs = 7_000_000L, played = true)))
+
+        val state = newVm().state.value as DetailUiState.Content
+
+        assertEquals(0L, state.positionMs)
     }
 
     @Test
