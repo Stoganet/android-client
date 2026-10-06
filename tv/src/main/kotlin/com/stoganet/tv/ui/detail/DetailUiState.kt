@@ -59,6 +59,7 @@ sealed interface DetailUiState {
         val cast: ImmutableList<CastMemberUiState>,
         val seasons: ImmutableList<SeasonUiState>,
         val resume: ResumeUiState?,
+        val start: ResumeUiState? = null,
         val streamUrl: String?,
         val isPlayable: Boolean,
         val mediaState: MediaState,

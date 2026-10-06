@@ -243,17 +243,18 @@ private fun TvActions(
     onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
 ) {
     val chipFocusRequester = remember { FocusRequester() }
+    val target = state.resume ?: state.start
     Column {
-        if (state.resume != null) {
-            val isResume = state.resume.positionMs > 0
+        if (target != null) {
+            val isResume = target.positionMs > 0
             val resumeDesc = if (isResume) {
-                stringResource(R.string.detail_resume_content_description, state.resume.title)
+                stringResource(R.string.detail_resume_content_description, target.title)
             } else {
-                stringResource(R.string.detail_play_content_description, state.resume.title)
+                stringResource(R.string.detail_play_content_description, target.title)
             }
             Button(
                 onClick = {
-                    onNavigateToPlayer(state.resume.episodeId, state.resume.streamUrl, state.resume.positionMs)
+                    onNavigateToPlayer(target.episodeId, target.streamUrl, target.positionMs)
                 },
                 modifier = Modifier
                     .focusRequester(focusRequester)
@@ -274,7 +275,7 @@ private fun TvActions(
             SeasonChips(
                 seasons = state.seasons,
                 selectedSeason = state.selectedSeason,
-                focusRequester = if (state.resume == null) focusRequester else chipFocusRequester,
+                focusRequester = if (target == null) focusRequester else chipFocusRequester,
                 onSelectSeason = { onIntent(DetailIntent.SelectSeason(it)) },
             )
             Spacer(Modifier.height(16.dp))

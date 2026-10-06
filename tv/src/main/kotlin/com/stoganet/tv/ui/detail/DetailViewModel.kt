@@ -119,6 +119,7 @@ class DetailViewModel(
         cast = cast.map { CastMemberUiState(it.name, it.role) }.toImmutableList(),
         seasons = seasons.map { it.toUiState() }.toImmutableList(),
         resume = resume?.toUiState(),
+        start = start?.toUiState(),
         streamUrl = play?.streamUrl,
         isPlayable = state == MediaState.PLAYABLE && play != null,
         mediaState = state,

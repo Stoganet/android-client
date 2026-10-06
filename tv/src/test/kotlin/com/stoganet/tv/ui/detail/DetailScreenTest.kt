@@ -434,4 +434,40 @@ class DetailScreenTest {
 
         assertEquals(90_000L, position)
     }
+
+    @Test
+    fun contentState_tv_finishedShow_playsFromFirstEpisode() = runComposeUiTest {
+        var received: Triple<String, String, Long>? = null
+        setContent {
+            DetailScreen(
+                state = fakeTvContent().copy(resume = null, start = tvResume(positionMs = 0L)),
+                onIntent = {},
+                onNavigateToPlayer = { id, url, pos -> received = Triple(id, url, pos) },
+            )
+        }
+
+        val desc = str(R.string.detail_play_content_description, "Pilot")
+        onNodeWithContentDescription(desc).requestFocus()
+        onNodeWithContentDescription(desc).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(Triple("ep-1", "https://stream.example.com/ep-1", 0L), received)
+    }
+
+    @Test
+    fun contentState_tv_resumeTakesPrecedenceOverStart() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeTvContent().copy(
+                    resume = tvResume(positionMs = 120_000L).copy(episodeNumber = 4, title = "Midseason"),
+                    start = tvResume(positionMs = 0L),
+                ),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, _ -> },
+            )
+        }
+
+        onNodeWithContentDescription(str(R.string.detail_resume_content_description, "Midseason")).assertIsDisplayed()
+        onNodeWithContentDescription(str(R.string.detail_play_content_description, "Pilot")).assertDoesNotExist()
+    }
 }
