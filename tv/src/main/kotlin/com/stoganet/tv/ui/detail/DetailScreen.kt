@@ -170,23 +170,27 @@ private fun DetailMetadataPanel(
             Spacer(Modifier.height(8.dp))
 
             val metaParts = buildList {
-                add(state.year.toString())
+                if (state.year > 0) add(state.year.toString())
                 if (state.genres.isNotEmpty()) add(state.genres.joinToString(", "))
                 if (state.mediaType == MediaType.MOVIE && state.runtime.isNotEmpty()) add(state.runtime)
             }
-            Text(
-                text = metaParts.joinToString(" · "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.75f),
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = state.overview,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f),
-                maxLines = 4,
-            )
-            Spacer(Modifier.height(24.dp))
+            if (metaParts.isNotEmpty()) {
+                Text(
+                    text = metaParts.joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+            if (state.overview.isNotBlank()) {
+                Text(
+                    text = state.overview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 4,
+                )
+                Spacer(Modifier.height(24.dp))
+            }
         }
 
         item {

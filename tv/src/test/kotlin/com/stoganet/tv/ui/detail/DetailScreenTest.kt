@@ -324,4 +324,39 @@ class DetailScreenTest {
             str(R.string.detail_downloading_content_description, "Test Movie"),
         ).assertIsDisplayed()
     }
+
+    @Test
+    fun contentState_movie_showsYearGenresAndRuntime() = runComposeUiTest {
+        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+
+        onNodeWithText("1999 · Action, Sci-Fi · 2h 16m").assertIsDisplayed()
+    }
+
+    @Test
+    fun contentState_missingYear_omitsYearFromMetadata() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeMovieContent().copy(year = 0),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, _ -> },
+            )
+        }
+
+        onNodeWithText("0 · Action, Sci-Fi · 2h 16m").assertDoesNotExist()
+        onNodeWithText("Action, Sci-Fi · 2h 16m").assertIsDisplayed()
+    }
+
+    @Test
+    fun contentState_noMetadata_stillShowsTitleWithoutBlankText() = runComposeUiTest {
+        setContent {
+            DetailScreen(
+                state = fakeTvContent().copy(year = 0, genres = persistentListOf(), overview = ""),
+                onIntent = {},
+                onNavigateToPlayer = { _, _, _ -> },
+            )
+        }
+
+        onNodeWithText("Test Show").assertIsDisplayed()
+        onNodeWithText("0").assertDoesNotExist()
+    }
 }
