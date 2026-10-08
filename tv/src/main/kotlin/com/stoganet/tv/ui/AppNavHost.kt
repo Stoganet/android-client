@@ -2,6 +2,9 @@ package com.stoganet.tv.ui
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -52,6 +55,8 @@ import com.stoganet.tv.ui.player.PlayerViewModel
 import com.stoganet.tv.ui.search.SearchScreen
 import com.stoganet.tv.ui.search.SearchViewModel
 
+private const val SCREEN_FADE_MS = 150
+
 @SuppressLint("LocalContextGetResourceValueCall")
 @Suppress("LongMethod")
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -79,7 +84,16 @@ fun AppNavHost() {
         }
     }
 
-    NavHost(navController = navController, startDestination = AppRoutes.HOME) {
+    NavHost(
+        navController = navController,
+        startDestination = AppRoutes.HOME,
+        enterTransition = { fadeIn(tween(SCREEN_FADE_MS)) },
+        exitTransition = { fadeOut(tween(SCREEN_FADE_MS)) },
+        popEnterTransition = { fadeIn(tween(SCREEN_FADE_MS)) },
+        popExitTransition = { fadeOut(tween(SCREEN_FADE_MS)) },
+        predictivePopEnterTransition = { fadeIn(tween(SCREEN_FADE_MS)) },
+        predictivePopExitTransition = { fadeOut(tween(SCREEN_FADE_MS)) },
+    ) {
         composable(AppRoutes.HOME) {
             DrawerScaffold(currentRoute = currentRoute, navigateTo = navigateTo) {
                 val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory)
