@@ -196,4 +196,30 @@ class LibraryViewModelTest {
         val content = vm.state.value as LibraryUiState.Content
         assertEquals("Inception (2010)", content.items[0].contentDescription)
     }
+
+    @Test
+    fun `ItemClicked stores focusedItemId`() = runTest {
+        coEvery { repository.getLibrary(any(), any(), any()) } returns Result.success(fakeResponse())
+        val vm = LibraryViewModel(MediaType.MOVIE, repository)
+
+        vm.onIntent(LibraryIntent.ItemClicked("1"))
+
+        assertEquals("1", (vm.state.value as LibraryUiState.Content).focusedItemId)
+    }
+
+    @Test
+    fun `LoadMore keeps focusedItemId`() = runTest {
+        val page1 = fakeResponse(items = listOf(fakeItem("1")), total = 2, nextCursor = "cursor1")
+        val page2 = fakeResponse(items = listOf(fakeItem("2")), total = 2, nextCursor = null)
+        coEvery { repository.getLibrary(any(), null, any()) } returns Result.success(page1)
+        coEvery { repository.getLibrary(any(), "cursor1", any()) } returns Result.success(page2)
+        val vm = LibraryViewModel(MediaType.MOVIE, repository)
+
+        vm.onIntent(LibraryIntent.ItemClicked("1"))
+        vm.onIntent(LibraryIntent.LoadMore)
+
+        val state = vm.state.value as LibraryUiState.Content
+        assertEquals(2, state.items.size)
+        assertEquals("1", state.focusedItemId)
+    }
 }

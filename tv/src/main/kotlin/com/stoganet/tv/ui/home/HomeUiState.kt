@@ -20,6 +20,7 @@ sealed interface HomeUiState {
     data object Loading : HomeUiState
 
     @Immutable
-    data class Content(val sections: ImmutableList<HomeSectionUiState>) : HomeUiState
+    data class Content(val sections: ImmutableList<HomeSectionUiState>, val focusedItemKey: String? = null) :
+        HomeUiState
     data object Error : HomeUiState
 }

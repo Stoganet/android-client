@@ -16,6 +16,7 @@ sealed interface LibraryUiState {
         val hasMore: Boolean,
         val isLoadingMore: Boolean,
         val hasLoadMoreError: Boolean = false,
+        val focusedItemId: String? = null,
     ) : LibraryUiState
 
     @Immutable

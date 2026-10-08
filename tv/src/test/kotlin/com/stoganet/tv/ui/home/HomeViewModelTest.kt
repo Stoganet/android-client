@@ -91,6 +91,41 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `ItemClicked stores focusedItemKey`() = runTest {
+        coEvery { repository.getHome() } returns Result.success(fakeResponse("all_movies"))
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+        vm.onIntent(HomeIntent.ItemClicked("all_movies/tmdb:movie:1"))
+
+        assertEquals("all_movies/tmdb:movie:1", (vm.state.value as HomeUiState.Content).focusedItemKey)
+    }
+
+    @Test
+    fun `ItemClicked while loading is ignored`() = runTest {
+        coEvery { repository.getHome() } returns Result.failure(RuntimeException("fail"))
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+        vm.onIntent(HomeIntent.ItemClicked("all_movies/tmdb:movie:1"))
+
+        assertEquals(HomeUiState.Error, vm.state.value)
+    }
+
+    @Test
+    fun `Retry clears focusedItemKey`() = runTest {
+        coEvery { repository.getHome() } returns Result.success(fakeResponse("all_movies"))
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+        vm.onIntent(HomeIntent.ItemClicked("all_movies/tmdb:movie:1"))
+        vm.onIntent(HomeIntent.Retry)
+        advanceUntilIdle()
+
+        assertNull((vm.state.value as HomeUiState.Content).focusedItemKey)
+    }
+
+    @Test
     fun `known section IDs map to correct string resources`() = runTest {
         coEvery { repository.getHome() } returns Result.success(
             fakeResponse("recently_added_movies", "recently_added_tv", "all_movies", "all_tv"),

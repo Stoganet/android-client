@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
@@ -32,18 +33,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
+import com.stoganet.tv.ui.FocusAfterFirstFrame
+import com.stoganet.tv.ui.focusRequesterIf
 import com.stoganet.tv.ui.home.PosterCard
 import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
 private const val GRID_COLUMNS = 6
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     state: LibraryUiState,
@@ -96,6 +97,7 @@ fun LibraryScreen(
     }
 }
 
+@Suppress("LongMethod")
 @Composable
 private fun LibraryGrid(
     state: LibraryUiState.Content,
@@ -105,7 +107,10 @@ private fun LibraryGrid(
 ) {
     val currentOnIntent by rememberUpdatedState(onIntent)
     val gridState = rememberLazyGridState()
-    val firstItemFocusRequester = rememberInitialFocusRequester(enabled = state.items.isNotEmpty())
+    val firstItemFocusRequester = remember { FocusRequester() }
+    val clickedItemFocusRequester = remember { FocusRequester() }
+    val restoreTarget = if (state.focusedItemId != null) clickedItemFocusRequester else firstItemFocusRequester
+    FocusAfterFirstFrame(target = restoreTarget, enabled = state.items.isNotEmpty())
     val shouldLoadMore by remember(state.items.size) {
         derivedStateOf {
             val info = gridState.layoutInfo.visibleItemsInfo
@@ -122,14 +127,19 @@ private fun LibraryGrid(
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier.fillMaxSize().focusRestorer(fallback = firstItemFocusRequester),
+        modifier = modifier.fillMaxSize().focusRestorer(fallback = restoreTarget),
     ) {
         itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
             PosterCard(
                 posterUrl = item.posterUrl,
                 contentDescription = item.contentDescription,
-                onClick = { onNavigateTo(AppRoutes.detail(item.id)) },
-                modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier,
+                onClick = {
+                    onIntent(LibraryIntent.ItemClicked(item.id))
+                    onNavigateTo(AppRoutes.detail(item.id))
+                },
+                modifier = Modifier
+                    .focusRequesterIf(index == 0, firstItemFocusRequester)
+                    .focusRequesterIf(item.id == state.focusedItemId, clickedItemFocusRequester),
             )
         }
         if (state.isLoadingMore) {

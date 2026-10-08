@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -33,6 +34,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
+import com.stoganet.tv.ui.FocusAfterFirstFrame
+import com.stoganet.tv.ui.focusRequesterIf
 import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
@@ -82,33 +85,52 @@ fun HomeScreen(
             }
         }
 
-        is HomeUiState.Content -> {
-            val firstSectionHasItems = state.sections.firstOrNull()?.items?.isNotEmpty() == true
-            val firstItemFocusRequester = rememberInitialFocusRequester(enabled = firstSectionHasItems)
-            LazyColumn(
-                modifier = modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                itemsIndexed(state.sections, key = { _, section -> section.id }) { index, section ->
-                    SectionRow(
-                        section = section,
-                        onSeeMore = section.seeMoreRoute?.let { route -> { onNavigateTo(route) } },
-                        onNavigateToDetail = { id -> onNavigateTo(AppRoutes.detail(id)) },
-                        firstItemFocusRequester = if (index == 0) firstItemFocusRequester else null,
-                    )
-                }
-            }
+        is HomeUiState.Content -> HomeRows(state, onIntent, onNavigateTo, modifier)
+    }
+}
+
+@Composable
+private fun HomeRows(
+    state: HomeUiState.Content,
+    onIntent: (HomeIntent) -> Unit,
+    onNavigateTo: (route: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val firstNonEmptySectionIndex = state.sections.indexOfFirst { it.items.isNotEmpty() }
+    val firstItemFocusRequester = remember { FocusRequester() }
+    val clickedItemFocusRequester = remember { FocusRequester() }
+    FocusAfterFirstFrame(
+        target = if (state.focusedItemKey != null) clickedItemFocusRequester else firstItemFocusRequester,
+        enabled = firstNonEmptySectionIndex >= 0,
+    )
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        itemsIndexed(state.sections, key = { _, section -> section.id }) { index, section ->
+            SectionRow(
+                section = section,
+                focusedItemKey = state.focusedItemKey,
+                clickedItemFocusRequester = clickedItemFocusRequester,
+                onSeeMore = section.seeMoreRoute?.let { route -> { onNavigateTo(route) } },
+                onItemClick = { key, id ->
+                    onIntent(HomeIntent.ItemClicked(key))
+                    onNavigateTo(AppRoutes.detail(id))
+                },
+                firstItemFocusRequester = if (index == firstNonEmptySectionIndex) firstItemFocusRequester else null,
+            )
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SectionRow(
     section: HomeSectionUiState,
+    focusedItemKey: String?,
+    clickedItemFocusRequester: FocusRequester,
     onSeeMore: (() -> Unit)?,
-    onNavigateToDetail: (id: String) -> Unit,
+    onItemClick: (key: String, id: String) -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
@@ -128,15 +150,14 @@ private fun SectionRow(
             },
         ) {
             itemsIndexed(section.items, key = { _, item -> item.id }) { index, item ->
+                val key = "${section.id}/${item.id}"
                 PosterCard(
                     posterUrl = item.posterUrl,
                     contentDescription = item.contentDescription,
-                    onClick = { onNavigateToDetail(item.id) },
-                    modifier = if (index == 0 && firstItemFocusRequester != null) {
-                        Modifier.focusRequester(firstItemFocusRequester)
-                    } else {
-                        Modifier
-                    },
+                    onClick = { onItemClick(key, item.id) },
+                    modifier = Modifier
+                        .focusRequesterIf(index == 0, firstItemFocusRequester)
+                        .focusRequesterIf(key == focusedItemKey, clickedItemFocusRequester),
                 )
             }
             if (onSeeMore != null) {

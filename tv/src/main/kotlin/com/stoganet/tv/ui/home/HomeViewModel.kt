@@ -31,6 +31,10 @@ class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
     fun onIntent(intent: HomeIntent) {
         when (intent) {
             HomeIntent.Retry -> loadHome()
+
+            is HomeIntent.ItemClicked -> _state.update { current ->
+                if (current is HomeUiState.Content) current.copy(focusedItemKey = intent.key) else current
+            }
         }
     }
 

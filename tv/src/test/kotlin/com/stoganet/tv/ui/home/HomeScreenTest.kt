@@ -2,14 +2,21 @@ package com.stoganet.tv.ui.home
 
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -18,6 +25,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -203,5 +211,136 @@ class HomeScreenTest {
         waitForIdle()
 
         assertEquals(AppRoutes.detail("item-1"), navigatedRoute)
+    }
+
+    @Test
+    fun returningToHome_focusesClickedItemInFirstRow() = runComposeUiTest {
+        assertFocusRestoredAfterReturn(rowPrefix = "Recent")
+    }
+
+    @Test
+    fun returningToHome_focusesClickedItemInLaterRow() = runComposeUiTest {
+        assertFocusRestoredAfterReturn(rowPrefix = "Movie")
+    }
+
+    @Test
+    fun contentState_withFocusedItemKey_focusesThatItem() = runComposeUiTest {
+        setContent {
+            HomeScreen(
+                state = twoRowState().copy(focusedItemKey = "movies/Movie-3"),
+                onIntent = {},
+                onNavigateTo = {},
+            )
+        }
+        waitForIdle()
+
+        onNodeWithContentDescription("Movie 3").assertIsFocused()
+    }
+
+    @Test
+    fun contentState_withoutFocusedItemKey_focusesFirstItem() = runComposeUiTest {
+        setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithContentDescription("Recent 1").assertIsFocused()
+    }
+
+    @Test
+    fun posterCard_click_firesItemClickedWithSectionAndItemId() = runComposeUiTest {
+        var intent: HomeIntent? = null
+        setContent { HomeScreen(state = twoRowState(), onIntent = { intent = it }, onNavigateTo = {}) }
+
+        onNodeWithContentDescription("Movie 2").requestFocus()
+        onNodeWithContentDescription("Movie 2").performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(HomeIntent.ItemClicked("movies/Movie-2"), intent)
+    }
+
+    @Test
+    fun emptyFirstRow_focusesFirstItemOfFirstNonEmptyRow() = runComposeUiTest {
+        setContent { HomeScreen(state = emptyFirstRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithContentDescription("Show 1").assertIsFocused()
+    }
+
+    @Test
+    fun emptyFirstRow_returningToHome_focusesClickedItem() = runComposeUiTest {
+        var state by mutableStateOf(emptyFirstRowState())
+        var showHome by mutableStateOf(true)
+        setContent {
+            val holder = rememberSaveableStateHolder()
+            if (showHome) {
+                holder.SaveableStateProvider("home") {
+                    HomeScreen(
+                        state = state,
+                        onIntent = { if (it is HomeIntent.ItemClicked) state = state.copy(focusedItemKey = it.key) },
+                        onNavigateTo = { showHome = false },
+                    )
+                }
+            }
+        }
+
+        onNodeWithContentDescription("Show 1").requestFocus()
+        onRoot().performKeyInput { repeat(3) { pressKey(Key.DirectionRight) } }
+        waitForIdle()
+        onNodeWithContentDescription("Show 4").assertIsFocused()
+        onRoot().performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+        showHome = true
+        waitForIdle()
+
+        onNodeWithContentDescription("Show 4").assertIsFocused()
+    }
+
+    private fun emptyFirstRowState() = HomeUiState.Content(
+        sections = persistentListOf(
+            HomeSectionUiState("recent_movies", R.string.home_section_recently_added_movies, persistentListOf(), false),
+            HomeSectionUiState(
+                "recent_tv",
+                R.string.home_section_recently_added_tv,
+                (1..10).map { HomeItemUiState("Show-$it", "", "Show $it") }.toPersistentList(),
+                false,
+            ),
+        ),
+    )
+
+    private fun twoRowState(): HomeUiState.Content {
+        fun items(prefix: String) = (1..10).map { HomeItemUiState("$prefix-$it", "", "$prefix $it") }.toPersistentList()
+        return HomeUiState.Content(
+            sections = persistentListOf(
+                HomeSectionUiState("recent", R.string.home_section_recently_added_movies, items("Recent"), false),
+                HomeSectionUiState("movies", R.string.home_section_all_movies, items("Movie"), false),
+            ),
+        )
+    }
+
+    private fun ComposeUiTest.assertFocusRestoredAfterReturn(rowPrefix: String) {
+        var state by mutableStateOf(twoRowState())
+        var showHome by mutableStateOf(true)
+        setContent {
+            val holder = rememberSaveableStateHolder()
+            if (showHome) {
+                holder.SaveableStateProvider("home") {
+                    HomeScreen(
+                        state = state,
+                        onIntent = { if (it is HomeIntent.ItemClicked) state = state.copy(focusedItemKey = it.key) },
+                        onNavigateTo = { showHome = false },
+                    )
+                }
+            }
+        }
+
+        onNodeWithContentDescription("$rowPrefix 1").requestFocus()
+        onRoot().performKeyInput { repeat(5) { pressKey(Key.DirectionRight) } }
+        waitForIdle()
+        onNodeWithContentDescription("$rowPrefix 6").assertIsFocused()
+        onRoot().performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+        showHome = true
+        waitForIdle()
+
+        onNodeWithContentDescription("$rowPrefix 6").assertIsFocused()
     }
 }

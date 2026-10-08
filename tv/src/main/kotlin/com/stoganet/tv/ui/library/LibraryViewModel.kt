@@ -45,6 +45,10 @@ class LibraryViewModel(private val type: MediaType, private val repository: Libr
                 if (current !is LibraryUiState.Content || current.isLoadingMore || !current.hasMore) return
                 loadLibrary(nextCursor)
             }
+
+            is LibraryIntent.ItemClicked -> _state.update { current ->
+                if (current is LibraryUiState.Content) current.copy(focusedItemId = intent.id) else current
+            }
         }
     }
 
@@ -69,13 +73,14 @@ class LibraryViewModel(private val type: MediaType, private val repository: Libr
                     nextCursor = response.nextCursor
                     val newItems = response.items.map { it.toUiState() }
                     _state.update { current ->
-                        val existing: ImmutableList<LibraryItemUiState> =
-                            if (current is LibraryUiState.Content) current.items else persistentListOf()
+                        val content = current as? LibraryUiState.Content
+                        val existing: ImmutableList<LibraryItemUiState> = content?.items ?: persistentListOf()
                         LibraryUiState.Content(
                             items = (existing + newItems).toImmutableList(),
                             hasMore = response.nextCursor != null,
                             isLoadingMore = false,
                             hasLoadMoreError = false,
+                            focusedItemId = content?.focusedItemId,
                         )
                     }
                 }

@@ -2,14 +2,20 @@ package com.stoganet.tv.ui.library
 
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -18,6 +24,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.stoganet.core.AppRoutes
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -141,5 +148,73 @@ class LibraryScreenTest {
         waitForIdle()
 
         assertEquals(AppRoutes.detail("item-1"), navigatedRoute)
+    }
+
+    @Test
+    fun contentState_withFocusedItemId_focusesThatItem() = runComposeUiTest {
+        setContent {
+            LibraryScreen(state = gridState().copy(focusedItemId = "item-9"), onIntent = {}, onNavigateTo = {})
+        }
+        waitForIdle()
+
+        onNodeWithContentDescription("Movie 9").assertIsFocused()
+    }
+
+    @Test
+    fun contentState_withoutFocusedItemId_focusesFirstItem() = runComposeUiTest {
+        setContent { LibraryScreen(state = gridState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithContentDescription("Movie 1").assertIsFocused()
+    }
+
+    @Test
+    fun posterCard_click_firesItemClicked() = runComposeUiTest {
+        val intents = mutableListOf<LibraryIntent>()
+        setContent { LibraryScreen(state = gridState(), onIntent = { intents += it }, onNavigateTo = {}) }
+
+        onNodeWithContentDescription("Movie 4").requestFocus()
+        onNodeWithContentDescription("Movie 4").performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertTrue(LibraryIntent.ItemClicked("item-4") in intents)
+    }
+
+    private fun gridState() = LibraryUiState.Content(
+        items = (1..60).map { LibraryItemUiState("item-$it", "", "Movie $it") }.toPersistentList(),
+        hasMore = false,
+        isLoadingMore = false,
+    )
+
+    @Test
+    fun returningToLibrary_focusesClickedItem() = runComposeUiTest {
+        var state by mutableStateOf(gridState())
+        var showLibrary by mutableStateOf(true)
+        setContent {
+            val holder = rememberSaveableStateHolder()
+            if (showLibrary) {
+                holder.SaveableStateProvider("library") {
+                    LibraryScreen(
+                        state = state,
+                        onIntent = { if (it is LibraryIntent.ItemClicked) state = state.copy(focusedItemId = it.id) },
+                        onNavigateTo = { showLibrary = false },
+                    )
+                }
+            }
+        }
+
+        onNodeWithContentDescription("Movie 1").requestFocus()
+        onRoot().performKeyInput {
+            repeat(3) { pressKey(Key.DirectionDown) }
+            repeat(2) { pressKey(Key.DirectionRight) }
+        }
+        waitForIdle()
+        onNodeWithContentDescription("Movie 21").assertIsFocused()
+        onRoot().performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+        showLibrary = true
+        waitForIdle()
+
+        onNodeWithContentDescription("Movie 21").assertIsFocused()
     }
 }
