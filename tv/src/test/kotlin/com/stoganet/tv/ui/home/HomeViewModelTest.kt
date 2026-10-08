@@ -45,6 +45,7 @@ class HomeViewModelTest {
         year = 2020,
         type = MediaType.MOVIE,
         poster = "https://img/$id",
+        thumbHasLogo = false,
         overview = "Overview",
         state = MediaState.PLAYABLE,
     )
@@ -193,6 +194,7 @@ class HomeViewModelTest {
             year = 1999,
             type = MediaType.MOVIE,
             poster = "https://img/1",
+            thumbHasLogo = false,
             overview = "Desc",
             state = MediaState.PLAYABLE,
         )

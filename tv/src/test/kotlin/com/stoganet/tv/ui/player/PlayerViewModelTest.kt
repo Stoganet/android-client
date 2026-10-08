@@ -97,6 +97,7 @@ class PlayerViewModelTest {
         year = 1999,
         type = MediaType.MOVIE,
         poster = "https://img/poster",
+        thumbHasLogo = false,
         overview = "A test movie overview.",
         state = if (play != null) MediaState.PLAYABLE else MediaState.DOWNLOADING,
         genres = listOf("Action"),

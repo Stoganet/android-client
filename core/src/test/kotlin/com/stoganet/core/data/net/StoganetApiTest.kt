@@ -237,7 +237,7 @@ class StoganetApiTest {
     @Test
     fun `getDetail returns LibraryDetail on 200`() = runTest {
         val json = """{"id":"tmdb:movie:603","title":"The Matrix","year":1999,"type":"movie",""" +
-            """"poster":"","overview":"A hacker.","state":"playable","genres":[],"runtime":136,"cast":[],"seasons":[]}"""
+            """"poster":"","thumb_has_logo":false,"overview":"A hacker.","state":"playable","genres":[],"runtime":136,"cast":[],"seasons":[]}"""
         val engine = MockEngine { respond(json, HttpStatusCode.OK, jsonHeader) }
         val api = buildApi(engine)
 
@@ -259,7 +259,7 @@ class StoganetApiTest {
     @Test
     fun `search returns SearchResponse on 200`() = runTest {
         val json = """{"items":[{"id":"tmdb:movie:603","title":"Test Movie","year":1999,"type":"movie",""" +
-            """"poster":"","overview":"A hacker.","state":"requestable"}]}"""
+            """"poster":"","thumb_has_logo":false,"overview":"A hacker.","state":"requestable"}]}"""
         val engine = MockEngine { respond(json, HttpStatusCode.OK, jsonHeader) }
         val api = buildApi(engine)
 

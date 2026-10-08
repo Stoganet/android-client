@@ -64,6 +64,7 @@ class DetailViewModelTest {
         type = MediaType.MOVIE,
         poster = "https://img/poster",
         backdrop = "https://img/backdrop",
+        thumbHasLogo = false,
         overview = "A computer hacker learns the truth.",
         state = if (play != null) MediaState.PLAYABLE else MediaState.DOWNLOADING,
         genres = listOf("Action", "Sci-Fi"),
