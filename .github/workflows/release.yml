@@ -3,6 +3,11 @@ name: release
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,10 +16,13 @@ jobs:
   build-signed-tv:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 1
 
       - name: Set up JDK 25
@@ -44,7 +52,7 @@ jobs:
       - name: Derive version from tag
         id: version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${RELEASE_TAG#v}"
           IFS='.' read -r major minor patch <<< "$tag"
           code=$((major * 10000 + minor * 100 + patch))
           echo "name=$tag" >> "$GITHUB_OUTPUT"
@@ -72,4 +80,4 @@ jobs:
       - name: Upload APK to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" tv/build/outputs/apk/release/*.apk
+        run: gh release upload "$RELEASE_TAG" tv/build/outputs/apk/release/*.apk
