@@ -2,6 +2,7 @@ package com.stoganet.tv.ui
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,12 +34,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.Icon
 import androidx.tv.material3.NavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
+import androidx.tv.material3.rememberDrawerState
 import com.stoganet.core.AppRoutes
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
@@ -59,7 +61,6 @@ private const val SCREEN_FADE_MS = 150
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Suppress("LongMethod")
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
@@ -183,20 +184,34 @@ fun AppNavHost() {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun DrawerScaffold(currentRoute: String?, navigateTo: (String) -> Unit, content: @Composable () -> Unit) {
+internal fun DrawerScaffold(currentRoute: String?, navigateTo: (String) -> Unit, content: @Composable () -> Unit) {
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerFocusRequester = remember { FocusRequester() }
+    BackHandler(enabled = drawerState.currentValue == DrawerValue.Closed) {
+        drawerFocusRequester.requestFocus()
+    }
     NavigationDrawer(
-        drawerContent = { NavDrawerContent(currentRoute = currentRoute, navigateTo = navigateTo) },
+        drawerContent = {
+            NavDrawerContent(
+                currentRoute = currentRoute,
+                navigateTo = navigateTo,
+                modifier = Modifier.focusRequester(drawerFocusRequester),
+            )
+        },
+        drawerState = drawerState,
     ) {
         content()
     }
 }
 
 @Suppress("LongMethod")
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, navigateTo: (String) -> Unit) {
+private fun NavigationDrawerScope.NavDrawerContent(
+    currentRoute: String?,
+    navigateTo: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val homeLabel = stringResource(R.string.nav_home)
     val searchLabel = stringResource(R.string.nav_search)
     val moviesLabel = stringResource(R.string.nav_movies)
@@ -218,7 +233,7 @@ private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, naviga
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxHeight()
             .padding(12.dp)
             .selectableGroup()
@@ -268,21 +283,18 @@ private fun NavigationDrawerScope.NavDrawerContent(currentRoute: String?, naviga
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 300, heightDp = 720)
 @Composable
 private fun PreviewNavDrawerHomeSelected() {
     NavigationDrawer(drawerContent = { NavDrawerContent(currentRoute = AppRoutes.HOME, navigateTo = {}) }) {}
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 300, heightDp = 720)
 @Composable
 private fun PreviewNavDrawerSearchSelected() {
     NavigationDrawer(drawerContent = { NavDrawerContent(currentRoute = AppRoutes.SEARCH, navigateTo = {}) }) {}
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 300, heightDp = 720)
 @Composable
 private fun PreviewNavDrawerMoviesSelected() {
@@ -291,7 +303,6 @@ private fun PreviewNavDrawerMoviesSelected() {
     ) {}
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 300, heightDp = 720)
 @Composable
 private fun PreviewNavDrawerTvSelected() {
