@@ -39,9 +39,6 @@ import com.stoganet.tv.ui.focusRequesterIf
 import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
-private const val SEE_MORE_ASPECT_RATIO = 2f / 3f
-
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -151,13 +148,15 @@ private fun SectionRow(
         ) {
             itemsIndexed(section.items, key = { _, item -> item.id }) { index, item ->
                 val key = "${section.id}/${item.id}"
-                PosterCard(
-                    posterUrl = item.posterUrl,
+                BackdropCard(
+                    title = item.title,
+                    imageUrl = item.thumbUrl,
                     contentDescription = item.contentDescription,
                     onClick = { onItemClick(key, item.id) },
                     modifier = Modifier
                         .focusRequesterIf(index == 0, firstItemFocusRequester)
                         .focusRequesterIf(key == focusedItemKey, clickedItemFocusRequester),
+                    imageHasTitle = item.thumbHasLogo,
                 )
             }
             if (onSeeMore != null) {
@@ -169,15 +168,14 @@ private fun SectionRow(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SeeMoreCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val label = stringResource(R.string.home_see_more)
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(120.dp)
-            .aspectRatio(SEE_MORE_ASPECT_RATIO)
+            .width(BACKDROP_CARD_WIDTH)
+            .aspectRatio(BACKDROP_CARD_ASPECT_RATIO)
             .semantics { contentDescription = label },
     ) {
         Box(
@@ -254,6 +252,5 @@ private fun previewItem(id: String, title: String, year: Int) = HomeItemUiState(
     title = title,
     year = year,
     overview = "",
-    posterUrl = "",
     contentDescription = "$title ($year)",
 )

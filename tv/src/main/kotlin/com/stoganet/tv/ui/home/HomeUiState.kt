@@ -19,7 +19,6 @@ data class HomeItemUiState(
     val title: String,
     val year: Int,
     val overview: String,
-    val posterUrl: String,
     val contentDescription: String,
     val backdropUrl: String? = null,
     val thumbUrl: String? = null,

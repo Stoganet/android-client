@@ -45,7 +45,6 @@ class HomeScreenTest {
         title = description,
         year = 2020,
         overview = "",
-        posterUrl = "",
         contentDescription = description,
     )
 
@@ -236,14 +235,14 @@ class HomeScreenTest {
     fun contentState_withFocusedItemKey_focusesThatItem() = runComposeUiTest {
         setContent {
             HomeScreen(
-                state = twoRowState().copy(focusedItemKey = "movies/Movie-3"),
+                state = twoRowState().copy(focusedItemKey = "movies/Movie-2"),
                 onIntent = {},
                 onNavigateTo = {},
             )
         }
         waitForIdle()
 
-        onNodeWithContentDescription("Movie 3").assertIsFocused()
+        onNodeWithContentDescription("Movie 2").assertIsFocused()
     }
 
     @Test
