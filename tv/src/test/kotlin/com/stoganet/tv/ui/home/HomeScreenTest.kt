@@ -14,7 +14,9 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -300,6 +302,50 @@ class HomeScreenTest {
         waitForIdle()
 
         onNodeWithContentDescription("Show 4").assertIsFocused()
+    }
+
+    @Test
+    fun hero_showsFirstItemOnOpen() = runComposeUiTest {
+        setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Recent 1")
+    }
+
+    @Test
+    fun hero_followsFocusAcrossAndDownRows() = runComposeUiTest {
+        setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Recent 2")
+
+        onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Movie 2")
+    }
+
+    @Test
+    fun hero_keepsLastItemWhenSeeMoreFocused() = runComposeUiTest {
+        val state = HomeUiState.Content(
+            sections = persistentListOf(
+                HomeSectionUiState(
+                    id = "all_movies",
+                    titleRes = R.string.home_section_all_movies,
+                    items = persistentListOf(item("item-1", "Movie One")),
+                    hasMore = true,
+                    seeMoreRoute = AppRoutes.LIBRARY_MOVIES,
+                ),
+            ),
+        )
+        setContent { HomeScreen(state = state, onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        onNodeWithContentDescription(str(R.string.home_see_more)).assertIsFocused()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Movie One")
     }
 
     private fun emptyFirstRowState() = HomeUiState.Content(
