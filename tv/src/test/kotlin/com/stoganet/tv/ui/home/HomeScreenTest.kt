@@ -40,8 +40,17 @@ class HomeScreenTest {
 
     private fun str(@StringRes id: Int): String = ApplicationProvider.getApplicationContext<Context>().getString(id)
 
+    private fun item(id: String, description: String) = HomeItemUiState(
+        id = id,
+        title = description,
+        year = 2020,
+        overview = "",
+        posterUrl = "",
+        contentDescription = description,
+    )
+
     private fun stubItems() = persistentListOf(
-        HomeItemUiState("1", "", "Movie One (2020)"),
+        item("1", "Movie One (2020)"),
     )
 
     @Test
@@ -195,7 +204,7 @@ class HomeScreenTest {
                         HomeSectionUiState(
                             id = "all_movies",
                             titleRes = R.string.home_section_all_movies,
-                            items = persistentListOf(HomeItemUiState("item-1", "", "Movie One (2020)")),
+                            items = persistentListOf(item("item-1", "Movie One (2020)")),
                             hasMore = false,
                             seeMoreRoute = null,
                         ),
@@ -300,14 +309,14 @@ class HomeScreenTest {
             HomeSectionUiState(
                 "recent_tv",
                 R.string.home_section_recently_added_tv,
-                (1..10).map { HomeItemUiState("Show-$it", "", "Show $it") }.toPersistentList(),
+                (1..10).map { item("Show-$it", "Show $it") }.toPersistentList(),
                 false,
             ),
         ),
     )
 
     private fun twoRowState(): HomeUiState.Content {
-        fun items(prefix: String) = (1..10).map { HomeItemUiState("$prefix-$it", "", "$prefix $it") }.toPersistentList()
+        fun items(prefix: String) = (1..10).map { item("$prefix-$it", "$prefix $it") }.toPersistentList()
         return HomeUiState.Content(
             sections = persistentListOf(
                 HomeSectionUiState("recent", R.string.home_section_recently_added_movies, items("Recent"), false),

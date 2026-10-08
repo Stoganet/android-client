@@ -19,8 +19,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -188,10 +190,10 @@ class HomeViewModelTest {
 
     @Test
     fun `item contentDescription includes title and year`() = runTest {
-        val matrixItem = LibraryItem(
-            id = "tmdb:movie:603",
-            title = "The Matrix",
-            year = 1999,
+        val testItem = LibraryItem(
+            id = "tmdb:movie:1",
+            title = "Test Movie",
+            year = 2001,
             type = MediaType.MOVIE,
             poster = "https://img/1",
             thumbHasLogo = false,
@@ -201,7 +203,7 @@ class HomeViewModelTest {
         coEvery { repository.getHome() } returns Result.success(
             HomeResponse(
                 sections = listOf(
-                    HomeSection(id = "all_movies", items = listOf(matrixItem), hasMore = false),
+                    HomeSection(id = "all_movies", items = listOf(testItem), hasMore = false),
                 ),
             ),
         )
@@ -210,6 +212,45 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         val item = (vm.state.value as HomeUiState.Content).sections[0].items[0]
-        assertEquals("The Matrix (1999)", item.contentDescription)
+        assertEquals("Test Movie (2001)", item.contentDescription)
+    }
+
+    @Test
+    fun `item maps hero text and card images`() = runTest {
+        val item = fakeItem().copy(
+            title = "Test Movie",
+            year = 2001,
+            overview = "Test overview.",
+            backdrop = "https://img/backdrop",
+            thumb = "https://img/thumb",
+            thumbHasLogo = true,
+        )
+        coEvery { repository.getHome() } returns Result.success(
+            HomeResponse(sections = listOf(HomeSection(id = "all_movies", items = listOf(item), hasMore = false))),
+        )
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+
+        val mapped = (vm.state.value as HomeUiState.Content).sections[0].items[0]
+        assertEquals("Test Movie", mapped.title)
+        assertEquals(2001, mapped.year)
+        assertEquals("Test overview.", mapped.overview)
+        assertEquals("https://img/backdrop", mapped.backdropUrl)
+        assertEquals("https://img/thumb", mapped.thumbUrl)
+        assertTrue(mapped.thumbHasLogo)
+    }
+
+    @Test
+    fun `item without backdrop or thumb maps to null images`() = runTest {
+        coEvery { repository.getHome() } returns Result.success(fakeResponse("all_movies"))
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+
+        val mapped = (vm.state.value as HomeUiState.Content).sections[0].items[0]
+        assertNull(mapped.backdropUrl)
+        assertNull(mapped.thumbUrl)
+        assertFalse(mapped.thumbHasLogo)
     }
 }

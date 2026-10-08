@@ -221,9 +221,9 @@ private fun PreviewError() {
 @Composable
 private fun PreviewContent() {
     val items = persistentListOf(
-        HomeItemUiState("1", "", "Movie One (2020)"),
-        HomeItemUiState("2", "", "Movie Two (2021)"),
-        HomeItemUiState("3", "", "Movie Three (2022)"),
+        previewItem("1", "Movie One", 2020),
+        previewItem("2", "Movie Two", 2021),
+        previewItem("3", "Movie Three", 2022),
     )
     HomeScreen(
         state = HomeUiState.Content(
@@ -248,3 +248,12 @@ private fun PreviewContent() {
         onNavigateTo = {},
     )
 }
+
+private fun previewItem(id: String, title: String, year: Int) = HomeItemUiState(
+    id = id,
+    title = title,
+    year = year,
+    overview = "",
+    posterUrl = "",
+    contentDescription = "$title ($year)",
+)
