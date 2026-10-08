@@ -17,7 +17,9 @@ android {
     buildTypes {
         debug {
             // 10.0.2.2 = emulator host loopback (local api-proxy), set API_BASE_URL for real devices
-            val baseUrl = System.getenv("API_BASE_URL") ?: "http://10.0.2.2:8080/"
+            val baseUrl = providers.gradleProperty("apiBaseUrl").orNull
+                ?: System.getenv("API_BASE_URL")
+                ?: "http://10.0.2.2:8080/"
             buildConfigField("String", "API_BASE_URL", "\"$baseUrl\"")
         }
         release {
