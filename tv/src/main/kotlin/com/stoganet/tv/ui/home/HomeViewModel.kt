@@ -62,8 +62,13 @@ class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
 
     private fun LibraryItem.toUiState() = HomeItemUiState(
         id = id,
-        posterUrl = poster,
-        contentDescription = "$title ($year)",
+        title = title,
+        year = year,
+        overview = overview,
+        contentDescription = if (year > 0) "$title ($year)" else title,
+        backdropUrl = backdrop,
+        thumbUrl = thumb,
+        thumbHasLogo = thumbHasLogo,
     )
 
     companion object {

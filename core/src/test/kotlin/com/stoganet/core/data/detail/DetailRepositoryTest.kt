@@ -25,6 +25,7 @@ class DetailRepositoryTest {
         type = MediaType.MOVIE,
         poster = "https://img/poster",
         backdrop = "https://img/backdrop",
+        thumbHasLogo = false,
         overview = "A computer hacker learns the truth.",
         state = MediaState.PLAYABLE,
         genres = listOf("Action", "Sci-Fi"),

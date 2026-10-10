@@ -23,6 +23,7 @@ class SearchRepositoryTest {
         year = 1999,
         type = MediaType.MOVIE,
         poster = "https://img/poster",
+        thumbHasLogo = false,
         overview = "overview",
         state = MediaState.REQUESTABLE,
     )

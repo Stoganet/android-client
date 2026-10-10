@@ -43,6 +43,7 @@ class LibraryViewModelTest {
         year = 2020,
         type = MediaType.MOVIE,
         poster = "https://img/$id",
+        thumbHasLogo = false,
         overview = "Overview",
         state = MediaState.PLAYABLE,
     )

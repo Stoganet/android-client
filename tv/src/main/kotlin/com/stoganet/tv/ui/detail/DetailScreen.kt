@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
@@ -48,6 +49,7 @@ private const val GRADIENT_MID_STOP = 0.55f
 private const val GRADIENT_MID_ALPHA = 0.85f
 private const val GRADIENT_START_ALPHA = 0.90f
 private const val PANEL_WIDTH_FRACTION = 0.52f
+private const val OVERVIEW_MAX_LINES = 7
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -186,7 +188,8 @@ private fun DetailMetadataPanel(
                     text = state.overview,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 4,
+                    maxLines = OVERVIEW_MAX_LINES,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(24.dp))
             }

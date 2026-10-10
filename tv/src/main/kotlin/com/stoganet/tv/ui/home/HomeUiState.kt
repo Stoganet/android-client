@@ -14,7 +14,16 @@ data class HomeSectionUiState(
 )
 
 @Immutable
-data class HomeItemUiState(val id: String, val posterUrl: String, val contentDescription: String)
+data class HomeItemUiState(
+    val id: String,
+    val title: String,
+    val year: Int,
+    val overview: String,
+    val contentDescription: String,
+    val backdropUrl: String? = null,
+    val thumbUrl: String? = null,
+    val thumbHasLogo: Boolean = false,
+)
 
 sealed interface HomeUiState {
     data object Loading : HomeUiState

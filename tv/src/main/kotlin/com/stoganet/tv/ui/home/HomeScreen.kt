@@ -1,27 +1,40 @@
 package com.stoganet.tv.ui.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -29,7 +42,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.core.AppRoutes
@@ -39,9 +51,15 @@ import com.stoganet.tv.ui.focusRequesterIf
 import com.stoganet.tv.ui.rememberInitialFocusRequester
 import kotlinx.collections.immutable.persistentListOf
 
-private const val SEE_MORE_ASPECT_RATIO = 2f / 3f
+private const val HERO_WEIGHT = 0.55f
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+// Rows scroll only by pinning the focused row to the top, not by default focus scrolling
+private val NoBringIntoViewScroll = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = 0f
+}
+
+private data class FocusedItem(val sectionIndex: Int, val item: HomeItemUiState)
+
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -96,30 +114,91 @@ private fun HomeRows(
     onNavigateTo: (route: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val initialFocus = remember(state.sections) { state.initialFocus() }
+    var heroItem by remember(state.sections) { mutableStateOf(initialFocus?.item) }
+    var focusedSectionIndex by remember(state.sections) { mutableIntStateOf(initialFocus?.sectionIndex ?: 0) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        HomeHeroBackdrop(backdropUrl = heroItem?.backdropUrl)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .weight(HERO_WEIGHT)
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, end = 48.dp, bottom = 16.dp),
+                contentAlignment = Alignment.BottomStart,
+            ) {
+                heroItem?.let { HomeHeroText(item = it) }
+            }
+            PinnedSectionRows(
+                state = state,
+                focusedSectionIndex = focusedSectionIndex,
+                onIntent = onIntent,
+                onNavigateTo = onNavigateTo,
+                onRowFocus = { focusedSectionIndex = it },
+                onItemFocus = { heroItem = it },
+                modifier = Modifier.weight(1f - HERO_WEIGHT),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PinnedSectionRows(
+    state: HomeUiState.Content,
+    focusedSectionIndex: Int,
+    onIntent: (HomeIntent) -> Unit,
+    onNavigateTo: (route: String) -> Unit,
+    onRowFocus: (sectionIndex: Int) -> Unit,
+    onItemFocus: (HomeItemUiState) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rowBringIntoViewSpec = LocalBringIntoViewSpec.current
+
+    val listState = rememberLazyListState()
+
     val firstNonEmptySectionIndex = state.sections.indexOfFirst { it.items.isNotEmpty() }
     val firstItemFocusRequester = remember { FocusRequester() }
     val clickedItemFocusRequester = remember { FocusRequester() }
+
     FocusAfterFirstFrame(
         target = if (state.focusedItemKey != null) clickedItemFocusRequester else firstItemFocusRequester,
         enabled = firstNonEmptySectionIndex >= 0,
     )
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        itemsIndexed(state.sections, key = { _, section -> section.id }) { index, section ->
-            SectionRow(
-                section = section,
-                focusedItemKey = state.focusedItemKey,
-                clickedItemFocusRequester = clickedItemFocusRequester,
-                onSeeMore = section.seeMoreRoute?.let { route -> { onNavigateTo(route) } },
-                onItemClick = { key, id ->
-                    onIntent(HomeIntent.ItemClicked(key))
-                    onNavigateTo(AppRoutes.detail(id))
-                },
-                firstItemFocusRequester = if (index == firstNonEmptySectionIndex) firstItemFocusRequester else null,
-            )
+    LaunchedEffect(focusedSectionIndex) { listState.animateScrollToItem(focusedSectionIndex) }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides NoBringIntoViewScroll) {
+            LazyColumn(
+                state = listState,
+                // Lets the last rows scroll up to the pinned position too
+                contentPadding = PaddingValues(bottom = maxHeight),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                itemsIndexed(state.sections, key = { _, section -> section.id }) { index, section ->
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+                        SectionRow(
+                            section = section,
+                            focusedItemKey = state.focusedItemKey,
+                            clickedItemFocusRequester = clickedItemFocusRequester,
+                            onSeeMore = section.seeMoreRoute?.let { route -> { onNavigateTo(route) } },
+                            onItemClick = { key, id ->
+                                onIntent(HomeIntent.ItemClicked(key))
+                                onNavigateTo(AppRoutes.detail(id))
+                            },
+                            onRowFocus = { onRowFocus(index) },
+                            onItemFocus = onItemFocus,
+                            firstItemFocusRequester = if (index == firstNonEmptySectionIndex) {
+                                firstItemFocusRequester
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -131,9 +210,11 @@ private fun SectionRow(
     clickedItemFocusRequester: FocusRequester,
     onSeeMore: (() -> Unit)?,
     onItemClick: (key: String, id: String) -> Unit,
+    onRowFocus: () -> Unit,
+    onItemFocus: (HomeItemUiState) -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
 ) {
-    Column {
+    Column(modifier = Modifier.onFocusChanged { if (it.hasFocus) onRowFocus() }) {
         Text(
             text = stringResource(section.titleRes),
             style = MaterialTheme.typography.titleMedium,
@@ -150,14 +231,17 @@ private fun SectionRow(
             },
         ) {
             itemsIndexed(section.items, key = { _, item -> item.id }) { index, item ->
-                val key = "${section.id}/${item.id}"
-                PosterCard(
-                    posterUrl = item.posterUrl,
+                val key = itemKey(section.id, item.id)
+                BackdropCard(
+                    title = item.title,
+                    imageUrl = item.thumbUrl,
                     contentDescription = item.contentDescription,
                     onClick = { onItemClick(key, item.id) },
                     modifier = Modifier
                         .focusRequesterIf(index == 0, firstItemFocusRequester)
-                        .focusRequesterIf(key == focusedItemKey, clickedItemFocusRequester),
+                        .focusRequesterIf(key == focusedItemKey, clickedItemFocusRequester)
+                        .onFocusChanged { if (it.isFocused) onItemFocus(item) },
+                    imageHasTitle = item.thumbHasLogo,
                 )
             }
             if (onSeeMore != null) {
@@ -169,15 +253,14 @@ private fun SectionRow(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SeeMoreCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val label = stringResource(R.string.home_see_more)
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(120.dp)
-            .aspectRatio(SEE_MORE_ASPECT_RATIO)
+            .width(BACKDROP_CARD_WIDTH)
+            .aspectRatio(BACKDROP_CARD_ASPECT_RATIO)
             .semantics { contentDescription = label },
     ) {
         Box(
@@ -197,6 +280,17 @@ private fun SeeMoreCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+private fun itemKey(sectionId: String, itemId: String) = "$sectionId/$itemId"
+
+private fun HomeUiState.Content.initialFocus(): FocusedItem? {
+    sections.forEachIndexed { index, section ->
+        section.items.firstOrNull { itemKey(section.id, it.id) == focusedItemKey }
+            ?.let { return FocusedItem(index, it) }
+    }
+    val index = sections.indexOfFirst { it.items.isNotEmpty() }
+    return if (index >= 0) FocusedItem(index, sections[index].items.first()) else null
 }
 
 @Preview
@@ -221,9 +315,9 @@ private fun PreviewError() {
 @Composable
 private fun PreviewContent() {
     val items = persistentListOf(
-        HomeItemUiState("1", "", "Movie One (2020)"),
-        HomeItemUiState("2", "", "Movie Two (2021)"),
-        HomeItemUiState("3", "", "Movie Three (2022)"),
+        previewItem("1", "Movie One", 2020),
+        previewItem("2", "Movie Two", 2021),
+        previewItem("3", "Movie Three", 2022),
     )
     HomeScreen(
         state = HomeUiState.Content(
@@ -248,3 +342,11 @@ private fun PreviewContent() {
         onNavigateTo = {},
     )
 }
+
+private fun previewItem(id: String, title: String, year: Int) = HomeItemUiState(
+    id = id,
+    title = title,
+    year = year,
+    overview = "",
+    contentDescription = "$title ($year)",
+)

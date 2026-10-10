@@ -14,7 +14,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -33,6 +36,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+private const val TV_SCREEN = "w960dp-h540dp"
+
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -40,8 +45,16 @@ class HomeScreenTest {
 
     private fun str(@StringRes id: Int): String = ApplicationProvider.getApplicationContext<Context>().getString(id)
 
+    private fun item(id: String, description: String) = HomeItemUiState(
+        id = id,
+        title = description,
+        year = 2020,
+        overview = "",
+        contentDescription = description,
+    )
+
     private fun stubItems() = persistentListOf(
-        HomeItemUiState("1", "", "Movie One (2020)"),
+        item("1", "Movie One (2020)"),
     )
 
     @Test
@@ -195,7 +208,7 @@ class HomeScreenTest {
                         HomeSectionUiState(
                             id = "all_movies",
                             titleRes = R.string.home_section_all_movies,
-                            items = persistentListOf(HomeItemUiState("item-1", "", "Movie One (2020)")),
+                            items = persistentListOf(item("item-1", "Movie One (2020)")),
                             hasMore = false,
                             seeMoreRoute = null,
                         ),
@@ -227,14 +240,14 @@ class HomeScreenTest {
     fun contentState_withFocusedItemKey_focusesThatItem() = runComposeUiTest {
         setContent {
             HomeScreen(
-                state = twoRowState().copy(focusedItemKey = "movies/Movie-3"),
+                state = twoRowState().copy(focusedItemKey = "movies/Movie-2"),
                 onIntent = {},
                 onNavigateTo = {},
             )
         }
         waitForIdle()
 
-        onNodeWithContentDescription("Movie 3").assertIsFocused()
+        onNodeWithContentDescription("Movie 2").assertIsFocused()
     }
 
     @Test
@@ -294,20 +307,96 @@ class HomeScreenTest {
         onNodeWithContentDescription("Show 4").assertIsFocused()
     }
 
+    @Test
+    fun hero_showsFirstItemOnOpen() = runComposeUiTest {
+        setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Recent 1")
+    }
+
+    @Test
+    @Config(qualifiers = TV_SCREEN)
+    fun hero_followsFocusAcrossAndDownRows() = runComposeUiTest {
+        setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Recent 2")
+
+        onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Movie 2")
+    }
+
+    @Test
+    fun hero_keepsLastItemWhenSeeMoreFocused() = runComposeUiTest {
+        val state = HomeUiState.Content(
+            sections = persistentListOf(
+                HomeSectionUiState(
+                    id = "all_movies",
+                    titleRes = R.string.home_section_all_movies,
+                    items = persistentListOf(item("item-1", "Movie One")),
+                    hasMore = true,
+                    seeMoreRoute = AppRoutes.LIBRARY_MOVIES,
+                ),
+            ),
+        )
+        setContent { HomeScreen(state = state, onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        onNodeWithContentDescription(str(R.string.home_see_more)).assertIsFocused()
+        onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Movie One")
+    }
+
+    @Test
+    @Config(qualifiers = TV_SCREEN)
+    fun focusingSeeMoreInNextRow_pinsThatRow() = runComposeUiTest {
+        val state = HomeUiState.Content(
+            sections = persistentListOf(
+                HomeSectionUiState(
+                    id = "recent",
+                    titleRes = R.string.home_section_recently_added_movies,
+                    items = (1..2).map { item("Recent-$it", "Recent $it") }.toPersistentList(),
+                    hasMore = false,
+                ),
+                HomeSectionUiState(
+                    id = "movies",
+                    titleRes = R.string.home_section_all_movies,
+                    items = persistentListOf(item("Movie-1", "Movie 1")),
+                    hasMore = true,
+                    seeMoreRoute = AppRoutes.LIBRARY_MOVIES,
+                ),
+            ),
+        )
+        setContent { HomeScreen(state = state, onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithContentDescription("Recent 2").requestFocus()
+        onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+
+        onNodeWithContentDescription(str(R.string.home_see_more)).assertIsFocused()
+        onNodeWithText(str(R.string.home_section_recently_added_movies)).assertIsNotDisplayed()
+    }
+
     private fun emptyFirstRowState() = HomeUiState.Content(
         sections = persistentListOf(
             HomeSectionUiState("recent_movies", R.string.home_section_recently_added_movies, persistentListOf(), false),
             HomeSectionUiState(
                 "recent_tv",
                 R.string.home_section_recently_added_tv,
-                (1..10).map { HomeItemUiState("Show-$it", "", "Show $it") }.toPersistentList(),
+                (1..10).map { item("Show-$it", "Show $it") }.toPersistentList(),
                 false,
             ),
         ),
     )
 
     private fun twoRowState(): HomeUiState.Content {
-        fun items(prefix: String) = (1..10).map { HomeItemUiState("$prefix-$it", "", "$prefix $it") }.toPersistentList()
+        fun items(prefix: String) = (1..10).map { item("$prefix-$it", "$prefix $it") }.toPersistentList()
         return HomeUiState.Content(
             sections = persistentListOf(
                 HomeSectionUiState("recent", R.string.home_section_recently_added_movies, items("Recent"), false),
