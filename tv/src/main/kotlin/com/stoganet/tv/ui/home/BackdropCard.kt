@@ -34,7 +34,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePreviewHandler
 import coil3.compose.LocalAsyncImagePreviewHandler
 
-val BACKDROP_CARD_WIDTH = 140.dp
+val BACKDROP_CARD_WIDTH = 180.dp
 const val BACKDROP_CARD_ASPECT_RATIO = 16f / 9f
 
 private const val TITLE_MAX_LINES = 2

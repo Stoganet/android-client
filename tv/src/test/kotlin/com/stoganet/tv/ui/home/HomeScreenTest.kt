@@ -36,6 +36,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+private const val TV_SCREEN = "w960dp-h540dp"
+
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -314,6 +316,7 @@ class HomeScreenTest {
     }
 
     @Test
+    @Config(qualifiers = TV_SCREEN)
     fun hero_followsFocusAcrossAndDownRows() = runComposeUiTest {
         setContent { HomeScreen(state = twoRowState(), onIntent = {}, onNavigateTo = {}) }
         waitForIdle()
@@ -350,6 +353,7 @@ class HomeScreenTest {
     }
 
     @Test
+    @Config(qualifiers = TV_SCREEN)
     fun focusingSeeMoreInNextRow_pinsThatRow() = runComposeUiTest {
         val state = HomeUiState.Content(
             sections = persistentListOf(

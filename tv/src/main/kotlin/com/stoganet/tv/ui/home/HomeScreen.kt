@@ -156,7 +156,7 @@ private fun PinnedSectionRows(
 ) {
     val rowBringIntoViewSpec = LocalBringIntoViewSpec.current
 
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = focusedSectionIndex)
+    val listState = rememberLazyListState()
 
     val firstNonEmptySectionIndex = state.sections.indexOfFirst { it.items.isNotEmpty() }
     val firstItemFocusRequester = remember { FocusRequester() }

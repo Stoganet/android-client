@@ -110,13 +110,15 @@ fun HomeHeroText(item: HomeItemUiState, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = item.overview,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = HERO_OVERVIEW_MAX_LINES,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (item.overview.isNotBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = item.overview,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = HERO_OVERVIEW_MAX_LINES,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
