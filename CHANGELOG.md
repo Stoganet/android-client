@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/Stoganet/android-client/compare/v0.1.1...v0.2.0) (2026-10-10)
+
+
+### Features
+
+* **tv:** add focus-driven hero and pinned rows to home ([e1e710f](https://github.com/Stoganet/android-client/commit/e1e710f37eeb8b3386d53d2c13a1ce08163d01eb))
+* **tv:** enlarge home cards and give detail overview more lines ([071b005](https://github.com/Stoganet/android-client/commit/071b0051bb9e0cd0dff6f2d1df05022289931787))
+* **tv:** map hero text and card images into home items ([e31f2b9](https://github.com/Stoganet/android-client/commit/e31f2b90ba6f3376adce07216951e6072c3f3f7d))
+* **tv:** redesign home with a focus-driven hero and 16:9 cards ([3a28cc3](https://github.com/Stoganet/android-client/commit/3a28cc36fd0517d6202d505bc9160299fccfb92c))
+* **tv:** show home rows as 16:9 backdrop cards ([7bc0af9](https://github.com/Stoganet/android-client/commit/7bc0af9d32f6c5235e086568fd3c8de2115dba9d))
+
+
+### Bug Fixes
+
+* **tv:** pin home rows on any focus and hide unknown years ([709a5ef](https://github.com/Stoganet/android-client/commit/709a5ef2d1e49ee937cff1fe968ceac7a3b9ab06))
+
 ## [0.1.1](https://github.com/Stoganet/android-client/compare/v0.1.0...v0.1.1) (2026-10-08)
 
 
