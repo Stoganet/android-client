@@ -216,6 +216,23 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `item without a year has the title alone as contentDescription`() = runTest {
+        coEvery { repository.getHome() } returns Result.success(
+            HomeResponse(
+                sections = listOf(
+                    HomeSection(id = "all_movies", items = listOf(fakeItem().copy(year = 0)), hasMore = false),
+                ),
+            ),
+        )
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+
+        val item = (vm.state.value as HomeUiState.Content).sections[0].items[0]
+        assertEquals("Movie", item.contentDescription)
+    }
+
+    @Test
     fun `item maps hero text and card images`() = runTest {
         val item = fakeItem().copy(
             title = "Test Movie",

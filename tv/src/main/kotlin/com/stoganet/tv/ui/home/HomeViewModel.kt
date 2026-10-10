@@ -65,7 +65,7 @@ class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
         title = title,
         year = year,
         overview = overview,
-        contentDescription = "$title ($year)",
+        contentDescription = if (year > 0) "$title ($year)" else title,
         backdropUrl = backdrop,
         thumbUrl = thumb,
         thumbHasLogo = thumbHasLogo,

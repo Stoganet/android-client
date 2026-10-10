@@ -102,12 +102,14 @@ fun HomeHeroText(item: HomeItemUiState, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag(HOME_HERO_TITLE_TAG),
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = item.year.toString(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (item.year > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = item.year.toString(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = item.overview,

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -346,6 +347,36 @@ class HomeScreenTest {
         waitForIdle()
         onNodeWithContentDescription(str(R.string.home_see_more)).assertIsFocused()
         onNodeWithTag(HOME_HERO_TITLE_TAG).assertTextEquals("Movie One")
+    }
+
+    @Test
+    fun focusingSeeMoreInNextRow_pinsThatRow() = runComposeUiTest {
+        val state = HomeUiState.Content(
+            sections = persistentListOf(
+                HomeSectionUiState(
+                    id = "recent",
+                    titleRes = R.string.home_section_recently_added_movies,
+                    items = (1..2).map { item("Recent-$it", "Recent $it") }.toPersistentList(),
+                    hasMore = false,
+                ),
+                HomeSectionUiState(
+                    id = "movies",
+                    titleRes = R.string.home_section_all_movies,
+                    items = persistentListOf(item("Movie-1", "Movie 1")),
+                    hasMore = true,
+                    seeMoreRoute = AppRoutes.LIBRARY_MOVIES,
+                ),
+            ),
+        )
+        setContent { HomeScreen(state = state, onIntent = {}, onNavigateTo = {}) }
+        waitForIdle()
+
+        onNodeWithContentDescription("Recent 2").requestFocus()
+        onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+
+        onNodeWithContentDescription(str(R.string.home_see_more)).assertIsFocused()
+        onNodeWithText(str(R.string.home_section_recently_added_movies)).assertIsNotDisplayed()
     }
 
     private fun emptyFirstRowState() = HomeUiState.Content(
