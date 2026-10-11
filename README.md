@@ -1,34 +1,41 @@
 # Stoganet Android Client
 
-Native Android clients for the Stoganet ecosystem. Kotlin + Compose. Talks exclusively to [api-proxy](https://github.com/Stoganet/api-proxy) — never directly to Jellyfin.
+Android apps for Stoganet. They talk only to [api-proxy](https://github.com/Stoganet/api-proxy), never directly to Jellyfin.
 
-Licensed under [MIT](./LICENSE).
+## TV app
+
+- Sign in with username and password or Jellyfin Quick Connect
+- Home with the focused item's backdrop, title and overview above rows of recently added and all movies and shows
+- Movie and TV show libraries
+- Detail screen with seasons, episodes and cast, plus Play and Resume
+- Player with subtitles and resume position
+- Search, and requesting titles that aren't in the library yet
 
 ## Modules
 
-- **`:core`** — data layer, `ServiceLocator` DI, generated OpenAPI client. No UI framework dependencies. Consumed by both apps below.
-- **`:tv`** (`com.stoganet.tv`) — Android TV app, Compose-for-TV. Shipping today.
-- **`:mobile`** (`com.stoganet.mobile`) — phone/tablet app, standard Material3. Placeholder screen only; real screens are a separate follow-up.
+- **`:core`**: data layer shared by both apps. Repositories, token storage, the HTTP client and the generated API client.
+- **`:tv`** (`com.stoganet.tv`): Android TV app.
+- **`:mobile`** (`com.stoganet.mobile`): phone and tablet app.
 
-`:tv` and `:mobile` are separate installable apps with separate `applicationId`s and manifests — `:tv` requires the Leanback launcher category and `android.software.leanback` feature, `:mobile` doesn't. Neither depends on the other.
+`:tv` and `:mobile` are separate apps with their own `applicationId` and manifest. `:tv` requires the Leanback launcher and the `android.software.leanback` feature. Neither depends on the other.
 
-## Architecture at a glance
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph app["Stoganet TV / Mobile"]
+  subgraph app["TV / mobile app"]
     NavHost[AppNavHost / AuthNavHost]
     VM[ViewModel + UiState]
   end
 
   subgraph core[":core"]
-    Repo[Repository]
+    Repo[Repositories]
     SL[ServiceLocator]
-    Client[HttpClientFactory\nKtor Auth plugin]
-    TS[TokenStore\nProto DataStore + Tink]
+    Client[HTTP client]
+    TS[TokenStore]
   end
 
-  API[(api-proxy\nhttps://api.stoganet.com)]
+  API[(api-proxy)]
 
   NavHost --> VM --> Repo
   Repo --> Client
@@ -39,61 +46,56 @@ flowchart LR
   SL --> TS
 ```
 
-**Single Ktor `HttpClient`, one base URL:** the `Auth` plugin attaches `Authorization: Bearer` from `TokenStore` and handles 401 → refresh → retry automatically. `refreshTokens` marks its own request with `markAsRefreshTokenRequest()` so a 401 on the refresh call itself doesn't trigger another refresh. The same client instance is reused by Coil for image loading in `:tv`.
+**One HTTP client, one base URL.** The client attaches the access token from `TokenStore` and handles 401 → refresh → retry. The refresh request is marked so that a 401 on the refresh itself doesn't trigger another refresh. The TV app reuses the same client for image loading.
 
-**Two NavHosts (`:tv` only):**
+**Tokens** are stored encrypted on the device and only accessed through `TokenStore`.
 
-- `AuthNavHost` — shown when no valid tokens exist. Quick Connect screen today.
-- `AppNavHost` — shown after authentication. Home screen (placeholder) today.
-
-`MainActivity` decides which NavHost to show based on `TokenStore`. `:mobile` has no navigation graph yet.
-
-## Screens (`:tv`)
-
-| Screen | Status | NavHost |
-|--------|--------|---------|
-| Quick Connect | ✅ | Auth |
-| Home / Browse | 🔜 | App |
-| Catalog detail | 🔜 | App |
-| Search | 🔜 | App |
+**Two NavHosts in `:tv`.** `AuthNavHost` is shown without valid tokens, and `AppNavHost` after sign-in. `MainActivity` picks one based on `TokenStore`.
 
 ## API client
 
-Generated from `openapi/openapi.yaml` (a copy of the spec from `api-proxy`) into `:core`, package `com.stoganet.core.api`. Run `./gradlew :core:openApiGenerate` after updating the spec. Generated code lands in `core/build/generated/openapi/` — never edit by hand.
+Generated from `openapi/openapi.yaml`, a copy of the spec in `api-proxy`, into `:core` under `com.stoganet.core.api`. After updating the spec, run `./gradlew :core:openApiGenerate`. The output goes to `core/build/generated/openapi/` and is never edited by hand.
 
-## Build & run
+## Build and run
 
 ```bash
-./gradlew :tv:installDebug                  # build debug and install to connected TV device/emulator
-./gradlew :mobile:installDebug              # build debug and install to connected phone/emulator
+./gradlew :tv:installDebug                  # install the TV app on a connected device or emulator
+./gradlew :mobile:installDebug              # install the mobile app
 ./gradlew :core:testDebugUnitTest :tv:testDebugUnitTest   # unit tests
 ./gradlew detekt                            # lint
-./gradlew detekt --auto-correct             # lint + auto-fix
-./gradlew :core:openApiGenerate             # regenerate Kotlin client from openapi/openapi.yaml
-./gradlew :tv:assembleRelease               # release APK (requires signing config)
+./gradlew detekt --auto-correct             # lint and auto-fix
+./gradlew :core:openApiGenerate             # regenerate the API client
+./gradlew :tv:assembleRelease               # release APK (needs a signing config)
 ```
 
 Run a single test class:
 
 ```bash
 ./gradlew :tv:testDebugUnitTest --tests "com.stoganet.tv.ui.auth.QuickConnectViewModelTest"
-./gradlew :core:testDebugUnitTest --tests "com.stoganet.core.data.auth.TokenStoreTest"
 ```
+
+## API base URL
+
+- **Release builds:** `https://api.stoganet.com/`
+- **Debug builds:** the `apiBaseUrl` Gradle property, then the `API_BASE_URL` environment variable, then `http://10.0.2.2:8080/` (an api-proxy running on the emulator's host machine)
+
+To point Android Studio debug builds at production, set `apiBaseUrl=https://api.stoganet.com/` in `~/.gradle/gradle.properties`.
+
+Debug builds also append `.debug` to the `applicationId`, so they install next to a release build, and they log HTTP requests.
 
 ## Repository layout
 
 | Path | What's there |
 |------|-------------|
-| `openapi/openapi.yaml` | API spec (copy from `api-proxy`) — source of truth for client generation |
-| `core/build/generated/openapi/` | Generated Kotlin client and models — do not edit |
-| `core/src/main/kotlin/.../data/` | `TokenStore`, `HttpClientFactory`, repositories |
-| `core/src/main/kotlin/.../di/` | `ServiceLocator` — manual DI wiring, shared by `:tv` and `:mobile` |
-| `core/consumer-rules.pro` | R8 keep rules for `:core` types, merged automatically into consumers |
-| `core/src/main/proto/` | Proto DataStore schema for encrypted token storage |
-| `tv/src/main/kotlin/.../ui/` | NavHosts, screens, ViewModels, UiState, Intent types |
+| `openapi/openapi.yaml` | API spec copied from `api-proxy` |
+| `core/src/main/kotlin/.../data/` | `TokenStore`, HTTP client, repositories |
+| `core/src/main/kotlin/.../di/` | `ServiceLocator`, the manual dependency wiring shared by both apps |
+| `core/src/main/proto/` | Schema for the encrypted token storage |
+| `core/consumer-rules.pro` | R8 keep rules for `:core`, merged into both apps automatically |
+| `tv/src/main/kotlin/.../ui/` | NavHosts, screens, ViewModels, UiState and Intent types |
 | `tv/src/main/res/` | Strings, drawables, TV banner |
-| `mobile/src/main/kotlin/.../` | Mobile app entry point |
+| `mobile/src/main/kotlin/.../` | Mobile app |
 
-## Environment
+## License
 
-No runtime environment variables. Base URL is hardcoded to `https://api.stoganet.com` in `HttpClientFactory`. Debug builds append `.debug` to `applicationId` and enable HTTP logging (headers only — no body).
+[MIT](./LICENSE)
