@@ -542,7 +542,7 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `seek preview stays within bounds`() = runTest(testDispatcher) {
+    fun `seek preview stays between start and 10 seconds before the end`() = runTest(testDispatcher) {
         every { player.currentPosition } returns 5_000L
         every { player.duration } returns 20_000L
         val vm = newVm()
@@ -552,7 +552,7 @@ class PlayerViewModelTest {
         assertEquals(0L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
 
         repeat(5) { vm.onIntent(PlayerIntent.SeekForward()) }
-        assertEquals(20_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+        assertEquals(10_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 
     @Test
@@ -604,5 +604,47 @@ class PlayerViewModelTest {
         assertEquals(60_000L, seekStepMs(40))
         assertEquals(120_000L, seekStepMs(60))
         assertEquals(120_000L, seekStepMs(500))
+    }
+
+    @Test
+    fun `forward seek near the end does not move the position back`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 15_000L
+        every { player.duration } returns 20_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        testDispatcher.scheduler.advanceTimeBy(1_000L)
+        testDispatcher.scheduler.runCurrent()
+
+        assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+        verify(exactly = 0) { player.seekTo(any()) }
+    }
+
+    @Test
+    fun `forward seek is ignored while duration is unknown`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns C.TIME_UNSET
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        testDispatcher.scheduler.advanceTimeBy(1_000L)
+        testDispatcher.scheduler.runCurrent()
+
+        assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+        verify(exactly = 0) { player.seekTo(any()) }
+    }
+
+    @Test
+    fun `backward seek works while duration is unknown`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 30_000L
+        every { player.duration } returns C.TIME_UNSET
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekBackward())
+
+        assertEquals(20_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 }

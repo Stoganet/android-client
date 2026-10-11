@@ -125,9 +125,14 @@ class PlayerViewModel(
     // Seeks once input pauses so held keys don't send a stream request per repeat
     private fun seekBy(direction: Int, repeatCount: Int) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
-        val step = seekStepMs(repeatCount)
-        val maxMs = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
-        val target = ((ready.seekPreviewMs ?: player.currentPosition) + direction * step).coerceIn(0, maxMs)
+        val start = ready.seekPreviewMs ?: player.currentPosition
+        // Forward stops short of the end so overshooting doesn't finish the video, and waits for a known length
+        val endLimitMs = player.duration.takeIf { it > 0 }?.let { it - SEEK_END_MARGIN_MS } ?: start
+        val target = (start + direction * seekStepMs(repeatCount)).coerceIn(0, maxOf(endLimitMs, start))
+        if (target == start) {
+            showControls()
+            return
+        }
         _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = target) else s }
         showControls()
 
@@ -373,6 +378,7 @@ class PlayerViewModel(
         private const val UI_TICK_INTERVAL_MS = 500L
         private const val CONTROLS_HIDE_DELAY_MS = 3_000L
         private const val SEEK_COMMIT_DELAY_MS = 700L
+        private const val SEEK_END_MARGIN_MS = 10_000L
         private const val UNAUTHORIZED_STATUS_CODE = 401
         private const val MAX_CAUSE_CHAIN_DEPTH = 10
 
