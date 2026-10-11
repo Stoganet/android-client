@@ -14,14 +14,14 @@ import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 @Config(sdk = [35])
 class PlayerControlsTest {
 
-    private fun composeKeyEvent(nativeKeyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN) =
-        ComposeKeyEvent(NativeKeyEvent(action, nativeKeyCode))
+    private val intents = mutableListOf<PlayerIntent>()
+
+    private fun press(keyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN): Boolean =
+        handleSeekBarKeyEvent(ComposeKeyEvent(NativeKeyEvent(action, keyCode))) { intents += it }
 
     @Test
     fun handleSeekBarKeyEvent_left_seeksBackward() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_LEFT)) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_LEFT)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.SeekBackward), intents)
@@ -29,9 +29,7 @@ class PlayerControlsTest {
 
     @Test
     fun handleSeekBarKeyEvent_right_seeksForward() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_RIGHT)) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_RIGHT)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.SeekForward), intents)
@@ -39,9 +37,7 @@ class PlayerControlsTest {
 
     @Test
     fun handleSeekBarKeyEvent_center_togglesPlayPause() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_CENTER)) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_CENTER)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -49,9 +45,7 @@ class PlayerControlsTest {
 
     @Test
     fun handleSeekBarKeyEvent_enter_togglesPlayPause() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(composeKeyEvent(NativeKeyEvent.KEYCODE_ENTER)) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_ENTER)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -59,11 +53,7 @@ class PlayerControlsTest {
 
     @Test
     fun handleSeekBarKeyEvent_keyUp_isIgnored() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_RIGHT, NativeKeyEvent.ACTION_UP),
-        ) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_RIGHT, NativeKeyEvent.ACTION_UP)
 
         assertFalse(consumed)
         assertTrue(intents.isEmpty())
@@ -71,9 +61,7 @@ class PlayerControlsTest {
 
     @Test
     fun handleSeekBarKeyEvent_down_isNotConsumed() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handleSeekBarKeyEvent(composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_DOWN)) { intents += it }
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_DOWN)
 
         assertFalse(consumed)
         assertTrue(intents.isEmpty())

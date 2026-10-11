@@ -148,32 +148,36 @@ internal fun handlePlayerKeyEvent(
     controlsVisible: Boolean,
     onIntent: (PlayerIntent) -> Unit,
 ): Boolean {
-    if (keyEvent.type != KeyEventType.KeyDown) {
+    val intent = when (val keyCode = keyEvent.nativeKeyEvent.keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+        KeyEvent.KEYCODE_MEDIA_PLAY,
+        KeyEvent.KEYCODE_MEDIA_PAUSE,
+        -> PlayerIntent.TogglePlayPause
+
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> PlayerIntent.SeekForward
+
+        KeyEvent.KEYCODE_MEDIA_REWIND -> PlayerIntent.SeekBackward
+
+        else -> if (controlsVisible) null else hiddenControlsIntent(keyCode)
+    }
+    if (keyEvent.type != KeyEventType.KeyDown || intent == null) {
         return false
     }
-    return when (keyEvent.nativeKeyEvent.keyCode) {
-        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-            onIntent(PlayerIntent.TogglePlayPause)
-            true
-        }
+    onIntent(intent)
+    return true
+}
 
-        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-            onIntent(PlayerIntent.SeekForward)
-            true
-        }
+private fun hiddenControlsIntent(keyCode: Int): PlayerIntent = when (keyCode) {
+    KeyEvent.KEYCODE_DPAD_CENTER,
+    KeyEvent.KEYCODE_ENTER,
+    KeyEvent.KEYCODE_NUMPAD_ENTER,
+    -> PlayerIntent.TogglePlayPause
 
-        KeyEvent.KEYCODE_MEDIA_REWIND -> {
-            onIntent(PlayerIntent.SeekBackward)
-            true
-        }
+    KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward
 
-        else -> if (!controlsVisible) {
-            onIntent(PlayerIntent.ShowControls)
-            true
-        } else {
-            false
-        }
-    }
+    KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward
+
+    else -> PlayerIntent.ShowControls
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
