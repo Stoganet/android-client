@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,6 +38,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun PlayerScreen(
@@ -117,6 +122,8 @@ private fun ReadyPlayerContent(
             update = { pv -> pv.player = player },
         )
 
+        BufferingSpinner(isBuffering = state.isBuffering, modifier = Modifier.align(Alignment.Center))
+
         if (state.subtitleMenuOpen) {
             SubtitleMenuOverlay(
                 state = state,
@@ -140,6 +147,21 @@ private fun ReadyPlayerContent(
                 else -> surfaceFocusRequester.requestFocus()
             }
         }
+    }
+}
+
+@Composable
+private fun BufferingSpinner(isBuffering: Boolean, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+
+    // Short stalls finish before the delay so the spinner doesn't flash
+    LaunchedEffect(isBuffering) {
+        if (isBuffering) delay(BUFFERING_SPINNER_DELAY)
+        visible = isBuffering
+    }
+
+    if (visible) {
+        CircularProgressIndicator(modifier = modifier, color = Color.White)
     }
 }
 
@@ -203,6 +225,8 @@ private fun mediaKeyIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): Pl
         else -> null
     }
 }
+
+private val BUFFERING_SPINNER_DELAY = 1.seconds
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable

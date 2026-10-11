@@ -95,8 +95,9 @@ class PlayerViewModel(
                         if (!isExiting) reportProgress(played = false)
                     }
                 }
-                if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) && playbackState == Player.STATE_ENDED) {
-                    reportProgress(played = true)
+                if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                    updateBuffering()
+                    if (playbackState == Player.STATE_ENDED) reportProgress(played = true)
                 }
             }
         }
@@ -343,6 +344,11 @@ class PlayerViewModel(
     private fun stopUiTick() {
         uiTickJob?.cancel()
         uiTickJob = null
+    }
+
+    private fun updateBuffering() {
+        val isBuffering = player.playbackState == Player.STATE_BUFFERING
+        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(isBuffering = isBuffering) else s }
     }
 
     private fun updatePlaybackPosition() {

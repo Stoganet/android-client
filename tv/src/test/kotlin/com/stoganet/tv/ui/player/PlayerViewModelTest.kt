@@ -647,4 +647,22 @@ class PlayerViewModelTest {
 
         assertEquals(20_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
+
+    @Test
+    fun `buffering event sets isBuffering and ready clears it`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playbackState } returns Player.STATE_BUFFERING
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYBACK_STATE_CHANGED))
+        testDispatcher.scheduler.runCurrent()
+        assertTrue((vm.state.value as PlayerUiState.Ready).isBuffering)
+
+        every { player.playbackState } returns Player.STATE_READY
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYBACK_STATE_CHANGED))
+        testDispatcher.scheduler.runCurrent()
+        assertFalse((vm.state.value as PlayerUiState.Ready).isBuffering)
+    }
 }

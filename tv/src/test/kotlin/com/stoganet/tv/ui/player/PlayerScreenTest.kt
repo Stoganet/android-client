@@ -141,6 +141,34 @@ class PlayerScreenTest {
         assertTrue(backCalled)
     }
 
+    @Test
+    fun readyState_buffering_showsSpinnerOnlyAfterOneSecond() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = false,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = false,
+                    isBuffering = true,
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+        val spinner = SemanticsMatcher.expectValue(
+            SemanticsProperties.ProgressBarRangeInfo,
+            ProgressBarRangeInfo.Indeterminate,
+        )
+
+        mainClock.advanceTimeBy(500L)
+        onNode(spinner).assertDoesNotExist()
+
+        mainClock.advanceTimeBy(600L)
+        onNode(spinner).assertIsDisplayed()
+    }
+
     private fun press(
         keyCode: Int,
         controlsVisible: Boolean,
