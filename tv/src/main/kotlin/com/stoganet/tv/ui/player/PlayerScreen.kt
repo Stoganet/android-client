@@ -7,15 +7,10 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -36,13 +31,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.stoganet.tv.R
 import kotlinx.collections.immutable.persistentListOf
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     state: PlayerUiState,
@@ -96,7 +89,6 @@ fun PlayerScreen(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ReadyPlayerContent(
     state: PlayerUiState.Ready,
@@ -105,10 +97,10 @@ private fun ReadyPlayerContent(
     modifier: Modifier = Modifier,
 ) {
     val surfaceFocusRequester = remember { FocusRequester() }
-    val playPauseFocusRequester = remember { FocusRequester() }
+    val controlsFocusRequester = remember { FocusRequester() }
     val subtitleMenuFocusRequester = remember { FocusRequester() }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
@@ -133,10 +125,10 @@ private fun ReadyPlayerContent(
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         } else if (state.controlsVisible) {
-            ControlsRow(
+            ControlsOverlay(
                 state = state,
                 onIntent = onIntent,
-                focusRequester = playPauseFocusRequester,
+                focusRequester = controlsFocusRequester,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -144,7 +136,7 @@ private fun ReadyPlayerContent(
         LaunchedEffect(state.subtitleMenuOpen, state.controlsVisible) {
             when {
                 state.subtitleMenuOpen -> subtitleMenuFocusRequester.requestFocus()
-                state.controlsVisible -> playPauseFocusRequester.requestFocus()
+                state.controlsVisible -> controlsFocusRequester.requestFocus()
                 else -> surfaceFocusRequester.requestFocus()
             }
         }
@@ -184,115 +176,18 @@ internal fun handlePlayerKeyEvent(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ControlsRow(
-    state: PlayerUiState.Ready,
-    onIntent: (PlayerIntent) -> Unit,
-    focusRequester: FocusRequester,
-    modifier: Modifier = Modifier,
-) {
-    val playLabel = stringResource(R.string.player_play_content_description)
-    val pauseLabel = stringResource(R.string.player_pause_content_description)
-    val rewindLabel = stringResource(R.string.player_rewind_content_description)
-    val forwardLabel = stringResource(R.string.player_forward_content_description)
-    val subtitlesLabel = stringResource(R.string.player_subtitles_content_description)
-    val progress = if (state.durationMs > 0) {
-        (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .padding(24.dp),
-    ) {
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Button(
-                onClick = { onIntent(PlayerIntent.SeekBackward) },
-                modifier = Modifier.semantics { contentDescription = rewindLabel },
-            ) { Text("-10s") }
-
-            Button(
-                onClick = { onIntent(PlayerIntent.TogglePlayPause) },
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .semantics { contentDescription = if (state.isPlaying) pauseLabel else playLabel },
-            ) { Text(if (state.isPlaying) pauseLabel else playLabel) }
-
-            Button(
-                onClick = { onIntent(PlayerIntent.SeekForward) },
-                modifier = Modifier.semantics { contentDescription = forwardLabel },
-            ) { Text("+10s") }
-
-            Button(
-                onClick = { onIntent(PlayerIntent.OpenSubtitleMenu) },
-                modifier = Modifier.semantics { contentDescription = subtitlesLabel },
-            ) { Text(subtitlesLabel) }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SubtitleMenuOverlay(
-    state: PlayerUiState.Ready,
-    onIntent: (PlayerIntent) -> Unit,
-    focusRequester: FocusRequester,
-    modifier: Modifier = Modifier,
-) {
-    val menuLabel = stringResource(R.string.player_subtitles_menu_content_description)
-    val offLabel = stringResource(R.string.player_subtitles_off)
-
-    Column(
-        modifier = modifier
-            .width(280.dp)
-            .padding(24.dp)
-            .background(Color.Black.copy(alpha = 0.8f))
-            .padding(16.dp)
-            .semantics { contentDescription = menuLabel },
-    ) {
-        Button(
-            onClick = { onIntent(PlayerIntent.SelectSubtitleTrack(null)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester)
-                .semantics { contentDescription = offLabel },
-        ) { Text(if (state.selectedSubtitleIndex == null) "• $offLabel" else offLabel) }
-
-        state.subtitleTracks.forEach { track ->
-            val label = track.title
-            val selected = state.selectedSubtitleIndex == track.index
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = { onIntent(PlayerIntent.SelectSubtitleTrack(track.index)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { contentDescription = label },
-            ) { Text(if (selected) "• $label" else label) }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerLoading() {
     PlayerScreen(state = PlayerUiState.Loading, onBack = {})
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerError() {
     PlayerScreen(state = PlayerUiState.Error, onBack = {})
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerReadyPlaying() {
@@ -307,7 +202,6 @@ private fun PreviewPlayerReadyPlaying() {
     )
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerReadyPaused() {
@@ -322,7 +216,21 @@ private fun PreviewPlayerReadyPaused() {
     )
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@Preview(showBackground = true, widthDp = 1280, heightDp = 720)
+@Composable
+private fun PreviewPlayerSeeking() {
+    PlayerScreen(
+        state = PlayerUiState.Ready(
+            isPlaying = true,
+            positionMs = 1_800_000L,
+            durationMs = 7_200_000L,
+            controlsVisible = true,
+            seekPreviewMs = 2_400_000L,
+        ),
+        onBack = {},
+    )
+}
+
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerSubtitleMenuOpen() {
@@ -343,7 +251,6 @@ private fun PreviewPlayerSubtitleMenuOpen() {
     )
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewPlayerControlsHidden() {

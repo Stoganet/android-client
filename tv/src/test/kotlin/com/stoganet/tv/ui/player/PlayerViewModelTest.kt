@@ -509,16 +509,87 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `SeekForward and SeekBackward seek by 10 seconds within bounds`() = runTest(testDispatcher) {
+    fun `seek presses move the preview without seeking the player`() = runTest(testDispatcher) {
         every { player.currentPosition } returns 5_000L
         every { player.duration } returns 60_000L
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onIntent(PlayerIntent.SeekForward)
+        vm.onIntent(PlayerIntent.SeekForward)
+        testDispatcher.scheduler.runCurrent()
+
+        assertEquals(25_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+        verify(exactly = 0) { player.seekTo(any()) }
+    }
+
+    @Test
+    fun `seek commits once after input pauses`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 60_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward)
+        vm.onIntent(PlayerIntent.SeekForward)
+        vm.onIntent(PlayerIntent.SeekBackward)
+        testDispatcher.scheduler.advanceTimeBy(1_000L)
+        testDispatcher.scheduler.runCurrent()
+
+        verify(exactly = 1) { player.seekTo(any()) }
         verify { player.seekTo(15_000L) }
+        assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+    }
+
+    @Test
+    fun `seek preview stays within bounds`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 20_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onIntent(PlayerIntent.SeekBackward)
-        verify { player.seekTo(0L) }
+        assertEquals(0L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+
+        repeat(5) { vm.onIntent(PlayerIntent.SeekForward) }
+        assertEquals(20_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+    }
+
+    @Test
+    fun `holding seek speeds up after many steps`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 0L
+        every { player.duration } returns 10_000_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        repeat(21) { vm.onIntent(PlayerIntent.SeekForward) }
+
+        assertEquals(230_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+    }
+
+    @Test
+    fun `duration updates once the player learns it`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.duration } returns C.TIME_UNSET
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0L, (vm.state.value as PlayerUiState.Ready).durationMs)
+
+        every { player.duration } returns 60_000L
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_TIMELINE_CHANGED))
+        testDispatcher.scheduler.runCurrent()
+
+        assertEquals(60_000L, (vm.state.value as PlayerUiState.Ready).durationMs)
+    }
+
+    @Test
+    fun `seek step grows through each tier while held`() {
+        assertEquals(10_000L, seekStepMs(0))
+        assertEquals(10_000L, seekStepMs(19))
+        assertEquals(30_000L, seekStepMs(20))
+        assertEquals(60_000L, seekStepMs(40))
+        assertEquals(120_000L, seekStepMs(60))
+        assertEquals(120_000L, seekStepMs(500))
     }
 }

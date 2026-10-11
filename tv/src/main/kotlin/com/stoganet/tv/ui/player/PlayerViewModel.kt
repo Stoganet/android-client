@@ -62,6 +62,8 @@ class PlayerViewModel(
     private var tickJob: Job? = null
     private var uiTickJob: Job? = null
     private var hideControlsJob: Job? = null
+    private var seekCommitJob: Job? = null
+    private var seekSteps = 0
     private var isExiting = false
     private var hasRetriedAfterAuthError = false
 
@@ -72,12 +74,16 @@ class PlayerViewModel(
                 Player.EVENT_PLAYBACK_STATE_CHANGED,
                 Player.EVENT_PLAYER_ERROR,
                 Player.EVENT_TRACKS_CHANGED,
+                Player.EVENT_TIMELINE_CHANGED,
             ) { events ->
                 if (events.contains(Player.EVENT_PLAYER_ERROR)) {
                     handlePlayerError()
                 }
                 if (events.contains(Player.EVENT_TRACKS_CHANGED)) {
                     applyDesiredSubtitleTrack()
+                }
+                if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                    updatePlaybackPosition()
                 }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     if (isPlaying) {
@@ -102,8 +108,8 @@ class PlayerViewModel(
         when (intent) {
             PlayerIntent.Exit -> exit()
             PlayerIntent.TogglePlayPause -> togglePlayPause()
-            PlayerIntent.SeekBackward -> seekBy(-SEEK_INCREMENT_MS)
-            PlayerIntent.SeekForward -> seekBy(SEEK_INCREMENT_MS)
+            PlayerIntent.SeekBackward -> seekBy(direction = -1)
+            PlayerIntent.SeekForward -> seekBy(direction = 1)
             PlayerIntent.ShowControls -> showControls()
             PlayerIntent.OpenSubtitleMenu -> openSubtitleMenu()
             PlayerIntent.CloseSubtitleMenu -> closeSubtitleMenu()
@@ -117,11 +123,23 @@ class PlayerViewModel(
         showControls()
     }
 
-    private fun seekBy(deltaMs: Long) {
-        val target = (player.currentPosition + deltaMs).coerceIn(0, player.duration.coerceAtLeast(0))
-        player.seekTo(target)
-        updatePlaybackPosition()
+    // Seeks once input pauses so held keys don't send a stream request per repeat
+    private fun seekBy(direction: Int) {
+        val ready = _state.value as? PlayerUiState.Ready ?: return
+        val step = seekStepMs(seekSteps++)
+        val maxMs = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        val target = ((ready.seekPreviewMs ?: player.currentPosition) + direction * step).coerceIn(0, maxMs)
+        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = target) else s }
         showControls()
+
+        seekCommitJob?.cancel()
+        seekCommitJob = viewModelScope.launch {
+            delay(SEEK_COMMIT_DELAY_MS.milliseconds)
+            player.seekTo(target)
+            seekSteps = 0
+            _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = null) else s }
+            updatePlaybackPosition()
+        }
     }
 
     private fun showControls() {
@@ -356,7 +374,7 @@ class PlayerViewModel(
         private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
         private const val UI_TICK_INTERVAL_MS = 500L
         private const val CONTROLS_HIDE_DELAY_MS = 3_000L
-        private const val SEEK_INCREMENT_MS = 10_000L
+        private const val SEEK_COMMIT_DELAY_MS = 700L
         private const val UNAUTHORIZED_STATUS_CODE = 401
         private const val MAX_CAUSE_CHAIN_DEPTH = 10
 
@@ -396,3 +414,15 @@ class PlayerViewModel(
             }
     }
 }
+
+private data class SeekTier(val fromStep: Int, val stepMs: Long)
+
+// Android TV repeats a held key about 20 times per second, so each tier starts roughly a second later
+private val SEEK_TIERS = listOf(
+    SeekTier(fromStep = 0, stepMs = 10_000L),
+    SeekTier(fromStep = 20, stepMs = 30_000L),
+    SeekTier(fromStep = 40, stepMs = 60_000L),
+    SeekTier(fromStep = 60, stepMs = 120_000L),
+)
+
+internal fun seekStepMs(stepIndex: Int): Long = SEEK_TIERS.last { stepIndex >= it.fromStep }.stepMs

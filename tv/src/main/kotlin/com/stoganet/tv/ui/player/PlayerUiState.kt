@@ -21,5 +21,6 @@ sealed interface PlayerUiState {
         val subtitleTracks: ImmutableList<SubtitleTrackUi> = persistentListOf(),
         val selectedSubtitleIndex: Int? = null,
         val subtitleMenuOpen: Boolean = false,
+        val seekPreviewMs: Long? = null,
     ) : PlayerUiState
 }
