@@ -16,15 +16,15 @@ class PlayerControlsTest {
 
     private val intents = mutableListOf<PlayerIntent>()
 
-    private fun press(keyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN): Boolean =
-        handleSeekBarKeyEvent(ComposeKeyEvent(NativeKeyEvent(action, keyCode))) { intents += it }
+    private fun press(keyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN, repeatCount: Int = 0): Boolean =
+        handleSeekBarKeyEvent(ComposeKeyEvent(NativeKeyEvent(0L, 0L, action, keyCode, repeatCount))) { intents += it }
 
     @Test
     fun handleSeekBarKeyEvent_left_seeksBackward() {
         val consumed = press(NativeKeyEvent.KEYCODE_DPAD_LEFT)
 
         assertTrue(consumed)
-        assertEquals(listOf(PlayerIntent.SeekBackward), intents)
+        assertEquals(listOf(PlayerIntent.SeekBackward()), intents)
     }
 
     @Test
@@ -32,7 +32,7 @@ class PlayerControlsTest {
         val consumed = press(NativeKeyEvent.KEYCODE_DPAD_RIGHT)
 
         assertTrue(consumed)
-        assertEquals(listOf(PlayerIntent.SeekForward), intents)
+        assertEquals(listOf(PlayerIntent.SeekForward()), intents)
     }
 
     @Test
@@ -64,6 +64,21 @@ class PlayerControlsTest {
         val consumed = press(NativeKeyEvent.KEYCODE_DPAD_DOWN)
 
         assertFalse(consumed)
+        assertTrue(intents.isEmpty())
+    }
+
+    @Test
+    fun handleSeekBarKeyEvent_heldLeft_passesRepeatCount() {
+        press(NativeKeyEvent.KEYCODE_DPAD_LEFT, repeatCount = 25)
+
+        assertEquals(listOf(PlayerIntent.SeekBackward(repeatCount = 25)), intents)
+    }
+
+    @Test
+    fun handleSeekBarKeyEvent_heldCenter_doesNotToggleAgain() {
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_CENTER, repeatCount = 1)
+
+        assertTrue(consumed)
         assertTrue(intents.isEmpty())
     }
 

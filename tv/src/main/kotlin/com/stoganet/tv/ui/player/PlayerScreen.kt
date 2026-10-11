@@ -156,19 +156,21 @@ internal fun handlePlayerKeyEvent(
 }
 
 // Shared with the seek bar so the D-pad maps to the same intents on the video and the controls
-internal fun dpadIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? =
-    when (keyEvent.nativeKeyEvent.keyCode) {
+internal fun dpadIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? {
+    val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+    return when (keyEvent.nativeKeyEvent.keyCode) {
         KeyEvent.KEYCODE_DPAD_CENTER,
         KeyEvent.KEYCODE_ENTER,
         KeyEvent.KEYCODE_NUMPAD_ENTER,
         -> PlayerIntent.TogglePlayPause
 
-        KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward
+        KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward(repeatCount)
 
-        KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward
+        KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward(repeatCount)
 
         else -> null
     }
+}
 
 internal fun sendOnKeyDown(
     keyEvent: androidx.compose.ui.input.key.KeyEvent,
@@ -178,23 +180,29 @@ internal fun sendOnKeyDown(
     if (keyEvent.type != KeyEventType.KeyDown || intent == null) {
         return false
     }
+    // Holding OK or play/pause must not toggle again on every key repeat
+    if (intent == PlayerIntent.TogglePlayPause && keyEvent.nativeKeyEvent.repeatCount > 0) {
+        return true
+    }
     onIntent(intent)
     return true
 }
 
-private fun mediaKeyIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? =
-    when (keyEvent.nativeKeyEvent.keyCode) {
+private fun mediaKeyIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? {
+    val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+    return when (keyEvent.nativeKeyEvent.keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         KeyEvent.KEYCODE_MEDIA_PLAY,
         KeyEvent.KEYCODE_MEDIA_PAUSE,
         -> PlayerIntent.TogglePlayPause
 
-        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> PlayerIntent.SeekForward
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> PlayerIntent.SeekForward(repeatCount)
 
-        KeyEvent.KEYCODE_MEDIA_REWIND -> PlayerIntent.SeekBackward
+        KeyEvent.KEYCODE_MEDIA_REWIND -> PlayerIntent.SeekBackward(repeatCount)
 
         else -> null
     }
+}
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable

@@ -515,8 +515,8 @@ class PlayerViewModelTest {
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        vm.onIntent(PlayerIntent.SeekForward)
-        vm.onIntent(PlayerIntent.SeekForward)
+        vm.onIntent(PlayerIntent.SeekForward())
+        vm.onIntent(PlayerIntent.SeekForward())
         testDispatcher.scheduler.runCurrent()
 
         assertEquals(25_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
@@ -530,9 +530,9 @@ class PlayerViewModelTest {
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        vm.onIntent(PlayerIntent.SeekForward)
-        vm.onIntent(PlayerIntent.SeekForward)
-        vm.onIntent(PlayerIntent.SeekBackward)
+        vm.onIntent(PlayerIntent.SeekForward())
+        vm.onIntent(PlayerIntent.SeekForward())
+        vm.onIntent(PlayerIntent.SeekBackward())
         testDispatcher.scheduler.advanceTimeBy(1_000L)
         testDispatcher.scheduler.runCurrent()
 
@@ -548,23 +548,36 @@ class PlayerViewModelTest {
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        vm.onIntent(PlayerIntent.SeekBackward)
+        vm.onIntent(PlayerIntent.SeekBackward())
         assertEquals(0L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
 
-        repeat(5) { vm.onIntent(PlayerIntent.SeekForward) }
+        repeat(5) { vm.onIntent(PlayerIntent.SeekForward()) }
         assertEquals(20_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 
     @Test
-    fun `holding seek speeds up after many steps`() = runTest(testDispatcher) {
+    fun `held seek key uses the faster tier`() = runTest(testDispatcher) {
         every { player.currentPosition } returns 0L
         every { player.duration } returns 10_000_000L
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        repeat(21) { vm.onIntent(PlayerIntent.SeekForward) }
+        vm.onIntent(PlayerIntent.SeekForward(repeatCount = 20))
 
-        assertEquals(230_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+        assertEquals(30_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+    }
+
+    @Test
+    fun `fresh press after a hold starts at the smallest step`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 0L
+        every { player.duration } returns 10_000_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward(repeatCount = 60))
+        vm.onIntent(PlayerIntent.SeekBackward())
+
+        assertEquals(110_000L, (vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 
     @Test
@@ -584,7 +597,7 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `seek step grows through each tier while held`() {
+    fun `seek step grows through each tier with the key repeat count`() {
         assertEquals(10_000L, seekStepMs(0))
         assertEquals(10_000L, seekStepMs(19))
         assertEquals(30_000L, seekStepMs(20))

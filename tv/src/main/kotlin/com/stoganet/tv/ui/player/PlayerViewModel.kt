@@ -63,7 +63,6 @@ class PlayerViewModel(
     private var uiTickJob: Job? = null
     private var hideControlsJob: Job? = null
     private var seekCommitJob: Job? = null
-    private var seekSteps = 0
     private var isExiting = false
     private var hasRetriedAfterAuthError = false
 
@@ -108,8 +107,8 @@ class PlayerViewModel(
         when (intent) {
             PlayerIntent.Exit -> exit()
             PlayerIntent.TogglePlayPause -> togglePlayPause()
-            PlayerIntent.SeekBackward -> seekBy(direction = -1)
-            PlayerIntent.SeekForward -> seekBy(direction = 1)
+            is PlayerIntent.SeekBackward -> seekBy(direction = -1, repeatCount = intent.repeatCount)
+            is PlayerIntent.SeekForward -> seekBy(direction = 1, repeatCount = intent.repeatCount)
             PlayerIntent.ShowControls -> showControls()
             PlayerIntent.OpenSubtitleMenu -> openSubtitleMenu()
             PlayerIntent.CloseSubtitleMenu -> closeSubtitleMenu()
@@ -124,9 +123,9 @@ class PlayerViewModel(
     }
 
     // Seeks once input pauses so held keys don't send a stream request per repeat
-    private fun seekBy(direction: Int) {
+    private fun seekBy(direction: Int, repeatCount: Int) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
-        val step = seekStepMs(seekSteps++)
+        val step = seekStepMs(repeatCount)
         val maxMs = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
         val target = ((ready.seekPreviewMs ?: player.currentPosition) + direction * step).coerceIn(0, maxMs)
         _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = target) else s }
@@ -136,7 +135,6 @@ class PlayerViewModel(
         seekCommitJob = viewModelScope.launch {
             delay(SEEK_COMMIT_DELAY_MS.milliseconds)
             player.seekTo(target)
-            seekSteps = 0
             _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = null) else s }
             updatePlaybackPosition()
         }
@@ -415,14 +413,14 @@ class PlayerViewModel(
     }
 }
 
-private data class SeekTier(val fromStep: Int, val stepMs: Long)
+private data class SeekTier(val fromRepeat: Int, val stepMs: Long)
 
 // Android TV repeats a held key about 20 times per second, so each tier starts roughly a second later
 private val SEEK_TIERS = listOf(
-    SeekTier(fromStep = 0, stepMs = 10_000L),
-    SeekTier(fromStep = 20, stepMs = 30_000L),
-    SeekTier(fromStep = 40, stepMs = 60_000L),
-    SeekTier(fromStep = 60, stepMs = 120_000L),
+    SeekTier(fromRepeat = 0, stepMs = 10_000L),
+    SeekTier(fromRepeat = 20, stepMs = 30_000L),
+    SeekTier(fromRepeat = 40, stepMs = 60_000L),
+    SeekTier(fromRepeat = 60, stepMs = 120_000L),
 )
 
-internal fun seekStepMs(stepIndex: Int): Long = SEEK_TIERS.last { stepIndex >= it.fromStep }.stepMs
+internal fun seekStepMs(repeatCount: Int): Long = SEEK_TIERS.last { repeatCount >= it.fromRepeat }.stepMs
