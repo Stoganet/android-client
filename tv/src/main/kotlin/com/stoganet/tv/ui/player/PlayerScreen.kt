@@ -148,7 +148,42 @@ internal fun handlePlayerKeyEvent(
     controlsVisible: Boolean,
     onIntent: (PlayerIntent) -> Unit,
 ): Boolean {
-    val intent = when (val keyCode = keyEvent.nativeKeyEvent.keyCode) {
+    val intent = mediaKeyIntent(keyEvent) ?: when {
+        controlsVisible -> null
+        else -> dpadIntent(keyEvent) ?: PlayerIntent.ShowControls
+    }
+    return sendOnKeyDown(keyEvent, intent, onIntent)
+}
+
+// Shared with the seek bar so the D-pad maps to the same intents on the video and the controls
+internal fun dpadIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? =
+    when (keyEvent.nativeKeyEvent.keyCode) {
+        KeyEvent.KEYCODE_DPAD_CENTER,
+        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_NUMPAD_ENTER,
+        -> PlayerIntent.TogglePlayPause
+
+        KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward
+
+        KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward
+
+        else -> null
+    }
+
+internal fun sendOnKeyDown(
+    keyEvent: androidx.compose.ui.input.key.KeyEvent,
+    intent: PlayerIntent?,
+    onIntent: (PlayerIntent) -> Unit,
+): Boolean {
+    if (keyEvent.type != KeyEventType.KeyDown || intent == null) {
+        return false
+    }
+    onIntent(intent)
+    return true
+}
+
+private fun mediaKeyIntent(keyEvent: androidx.compose.ui.input.key.KeyEvent): PlayerIntent? =
+    when (keyEvent.nativeKeyEvent.keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         KeyEvent.KEYCODE_MEDIA_PLAY,
         KeyEvent.KEYCODE_MEDIA_PAUSE,
@@ -158,27 +193,8 @@ internal fun handlePlayerKeyEvent(
 
         KeyEvent.KEYCODE_MEDIA_REWIND -> PlayerIntent.SeekBackward
 
-        else -> if (controlsVisible) null else hiddenControlsIntent(keyCode)
+        else -> null
     }
-    if (keyEvent.type != KeyEventType.KeyDown || intent == null) {
-        return false
-    }
-    onIntent(intent)
-    return true
-}
-
-private fun hiddenControlsIntent(keyCode: Int): PlayerIntent = when (keyCode) {
-    KeyEvent.KEYCODE_DPAD_CENTER,
-    KeyEvent.KEYCODE_ENTER,
-    KeyEvent.KEYCODE_NUMPAD_ENTER,
-    -> PlayerIntent.TogglePlayPause
-
-    KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward
-
-    KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward
-
-    else -> PlayerIntent.ShowControls
-}
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable

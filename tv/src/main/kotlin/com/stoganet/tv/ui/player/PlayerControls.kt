@@ -29,9 +29,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -210,25 +208,7 @@ private fun PlaybackTimeText(text: String) {
 internal fun handleSeekBarKeyEvent(
     keyEvent: androidx.compose.ui.input.key.KeyEvent,
     onIntent: (PlayerIntent) -> Unit,
-): Boolean {
-    val intent = when (keyEvent.nativeKeyEvent.keyCode) {
-        KeyEvent.KEYCODE_DPAD_LEFT -> PlayerIntent.SeekBackward
-
-        KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerIntent.SeekForward
-
-        KeyEvent.KEYCODE_DPAD_CENTER,
-        KeyEvent.KEYCODE_ENTER,
-        KeyEvent.KEYCODE_NUMPAD_ENTER,
-        -> PlayerIntent.TogglePlayPause
-
-        else -> null
-    }
-    if (keyEvent.type != KeyEventType.KeyDown || intent == null) {
-        return false
-    }
-    onIntent(intent)
-    return true
-}
+): Boolean = sendOnKeyDown(keyEvent, dpadIntent(keyEvent), onIntent)
 
 internal fun formatPlaybackTime(ms: Long, withHours: Boolean): String =
     ms.coerceAtLeast(0).milliseconds.toComponents { hours, minutes, seconds, _ ->
