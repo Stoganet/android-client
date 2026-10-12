@@ -18,8 +18,10 @@ sealed interface PlayerUiState {
         val positionMs: Long,
         val durationMs: Long,
         val controlsVisible: Boolean,
+        val isBuffering: Boolean = false,
         val subtitleTracks: ImmutableList<SubtitleTrackUi> = persistentListOf(),
         val selectedSubtitleIndex: Int? = null,
         val subtitleMenuOpen: Boolean = false,
+        val seekPreviewMs: Long? = null,
     ) : PlayerUiState
 }

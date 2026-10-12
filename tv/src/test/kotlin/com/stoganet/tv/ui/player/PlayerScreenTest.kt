@@ -39,6 +39,8 @@ class PlayerScreenTest {
         every { applicationLooper } returns android.os.Looper.getMainLooper()
     }
 
+    private val intents = mutableListOf<PlayerIntent>()
+
     @Test
     fun loadingState_showsProgressIndicator() = runComposeUiTest {
         setContent {
@@ -139,18 +141,47 @@ class PlayerScreenTest {
         assertTrue(backCalled)
     }
 
-    private fun composeKeyEvent(nativeKeyCode: Int, action: Int = NativeKeyEvent.ACTION_DOWN) =
-        ComposeKeyEvent(NativeKeyEvent(action, nativeKeyCode))
+    @Test
+    fun readyState_buffering_showsSpinnerOnlyAfterOneSecond() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = false,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = false,
+                    isBuffering = true,
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+        val spinner = SemanticsMatcher.expectValue(
+            SemanticsProperties.ProgressBarRangeInfo,
+            ProgressBarRangeInfo.Indeterminate,
+        )
+
+        mainClock.advanceTimeBy(500L)
+        onNode(spinner).assertDoesNotExist()
+
+        mainClock.advanceTimeBy(600L)
+        onNode(spinner).assertIsDisplayed()
+    }
+
+    private fun press(
+        keyCode: Int,
+        controlsVisible: Boolean,
+        action: Int = NativeKeyEvent.ACTION_DOWN,
+        repeatCount: Int = 0,
+    ): Boolean = handlePlayerKeyEvent(
+        ComposeKeyEvent(NativeKeyEvent(0L, 0L, action, keyCode, repeatCount)),
+        controlsVisible,
+    ) { intents += it }
 
     @Test
     fun handlePlayerKeyEvent_mediaPlayPause_togglesPlayPause() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, controlsVisible = true)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -158,13 +189,7 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_mediaPlay_togglesPlayPause() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_PLAY, controlsVisible = true)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -172,13 +197,7 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_mediaPause_togglesPlayPause() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PAUSE),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_PAUSE, controlsVisible = true)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -186,13 +205,7 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_mediaPlayPause_withHiddenControls_stillTogglesInsteadOfJustShowing() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
-            controlsVisible = false,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, controlsVisible = false)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
@@ -200,54 +213,34 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_mediaFastForward_withHiddenControls_stillSeeksInsteadOfJustShowing() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD),
-            controlsVisible = false,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD, controlsVisible = false)
 
         assertTrue(consumed)
-        assertEquals(listOf(PlayerIntent.SeekForward), intents)
+        assertEquals(listOf(PlayerIntent.SeekForward()), intents)
     }
 
     @Test
     fun handlePlayerKeyEvent_mediaFastForward_seeksForward() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD, controlsVisible = true)
 
         assertTrue(consumed)
-        assertEquals(listOf(PlayerIntent.SeekForward), intents)
+        assertEquals(listOf(PlayerIntent.SeekForward()), intents)
     }
 
     @Test
     fun handlePlayerKeyEvent_mediaRewind_seeksBackward() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_REWIND),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_REWIND, controlsVisible = true)
 
         assertTrue(consumed)
-        assertEquals(listOf(PlayerIntent.SeekBackward), intents)
+        assertEquals(listOf(PlayerIntent.SeekBackward()), intents)
     }
 
     @Test
     fun handlePlayerKeyEvent_keyUp_isIgnored() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, action = NativeKeyEvent.ACTION_UP),
+        val consumed = press(
+            NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             controlsVisible = true,
-            onIntent = { intents += it },
+            action = NativeKeyEvent.ACTION_UP,
         )
 
         assertFalse(consumed)
@@ -256,13 +249,7 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_otherKeyWithHiddenControls_showsControls() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_DOWN),
-            controlsVisible = false,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_DOWN, controlsVisible = false)
 
         assertTrue(consumed)
         assertEquals(listOf(PlayerIntent.ShowControls), intents)
@@ -270,15 +257,56 @@ class PlayerScreenTest {
 
     @Test
     fun handlePlayerKeyEvent_otherKeyWithVisibleControls_isNotConsumed() {
-        val intents = mutableListOf<PlayerIntent>()
-
-        val consumed = handlePlayerKeyEvent(
-            composeKeyEvent(NativeKeyEvent.KEYCODE_DPAD_DOWN),
-            controlsVisible = true,
-            onIntent = { intents += it },
-        )
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_DOWN, controlsVisible = true)
 
         assertFalse(consumed)
         assertTrue(intents.isEmpty())
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_centerWithHiddenControls_togglesPlayPause() {
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_CENTER, controlsVisible = false)
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.TogglePlayPause), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_leftWithHiddenControls_seeksBackward() {
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_LEFT, controlsVisible = false)
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.SeekBackward()), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_rightWithHiddenControls_seeksForward() {
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_RIGHT, controlsVisible = false)
+
+        assertTrue(consumed)
+        assertEquals(listOf(PlayerIntent.SeekForward()), intents)
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_heldCenterWithHiddenControls_doesNotToggleAgain() {
+        val consumed = press(NativeKeyEvent.KEYCODE_DPAD_CENTER, controlsVisible = false, repeatCount = 1)
+
+        assertTrue(consumed)
+        assertTrue(intents.isEmpty())
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_heldMediaPlayPause_doesNotToggleAgain() {
+        val consumed = press(NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, controlsVisible = true, repeatCount = 3)
+
+        assertTrue(consumed)
+        assertTrue(intents.isEmpty())
+    }
+
+    @Test
+    fun handlePlayerKeyEvent_heldRightWithHiddenControls_passesRepeatCount() {
+        press(NativeKeyEvent.KEYCODE_DPAD_RIGHT, controlsVisible = false, repeatCount = 7)
+
+        assertEquals(listOf(PlayerIntent.SeekForward(repeatCount = 7)), intents)
     }
 }
