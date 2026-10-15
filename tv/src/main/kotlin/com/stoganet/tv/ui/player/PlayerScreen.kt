@@ -249,6 +249,7 @@ private fun PreviewPlayerReadyPlaying() {
             positionMs = 30_000L,
             durationMs = 120_000L,
             controlsVisible = true,
+            title = "Test Movie",
         ),
         onBack = {},
     )
@@ -263,6 +264,8 @@ private fun PreviewPlayerReadyPaused() {
             positionMs = 60_000L,
             durationMs = 120_000L,
             controlsVisible = true,
+            title = "Test Episode",
+            episodeLine = EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 2),
         ),
         onBack = {},
     )

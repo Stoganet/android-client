@@ -1,6 +1,5 @@
 package com.stoganet.tv.ui.player
 
-import android.view.KeyEvent
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
@@ -34,6 +33,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
@@ -63,6 +63,13 @@ internal fun ControlsOverlay(
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
             .padding(start = 48.dp, end = 48.dp, top = 96.dp, bottom = 32.dp),
     ) {
+        if (state.title != null) {
+            PlayerTitle(
+                title = state.title,
+                episodeLine = state.episodeLine,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+        }
         PlayerSeekBar(
             positionMs = state.seekPreviewMs ?: state.positionMs,
             durationMs = state.durationMs,
@@ -169,6 +176,34 @@ private fun PlayerSeekBar(
             PlaybackTimeText(formatPlaybackTime(positionMs, withHours))
             Spacer(Modifier.weight(1f))
             PlaybackTimeText(formatPlaybackTime(durationMs, withHours))
+        }
+    }
+}
+
+@Composable
+private fun PlayerTitle(title: String, episodeLine: EpisodeLineUi?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (episodeLine != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(
+                    R.string.player_episode_line,
+                    episodeLine.seriesTitle,
+                    episodeLine.seasonNumber,
+                    episodeLine.number,
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

@@ -169,6 +169,47 @@ class PlayerScreenTest {
         onNode(spinner).assertIsDisplayed()
     }
 
+    @Test
+    fun readyState_episode_showsEpisodeTitleAndEpisodeLine() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    title = "Test Episode",
+                    episodeLine = EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3),
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        onNodeWithText("Test Episode").assertIsDisplayed()
+        onNodeWithText("Test Show · S1:E3").assertIsDisplayed()
+    }
+
+    @Test
+    fun readyState_movie_showsTitleWithoutEpisodeLine() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    title = "Test Movie",
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        onNodeWithText("Test Movie").assertIsDisplayed()
+        onNodeWithText(":E", substring = true).assertDoesNotExist()
+    }
+
     private fun press(
         keyCode: Int,
         controlsVisible: Boolean,

@@ -58,6 +58,8 @@ class PlayerViewModel(
 
     private var currentStreamUrl: String? = streamUrl
     private var currentSubtitleTracks: List<SubtitleTrackUi> = emptyList()
+    private var title: String? = null
+    private var episodeLine: EpisodeLineUi? = null
     private var desiredSubtitleIndex: Int? = null
     private var tickJob: Job? = null
     private var uiTickJob: Job? = null
@@ -234,7 +236,8 @@ class PlayerViewModel(
     // comes from here. Falls back to the given streamUrl so episodes/resume/failed fetches still play.
     private fun loadAndPrepare() {
         viewModelScope.launch {
-            val play = repository.getDetail(id).getOrNull()?.play
+            val detail = repository.getDetail(id).getOrNull()
+            val play = detail?.play
             val url = streamUrl ?: play?.streamUrl
             if (url == null) {
                 _state.update { PlayerUiState.Error }
@@ -245,6 +248,9 @@ class PlayerViewModel(
             }
             currentStreamUrl = url
             currentSubtitleTracks = tracks
+            val episode = detail?.episode
+            title = detail?.title
+            episodeLine = episode?.let { EpisodeLineUi(it.series.title, it.seasonNumber, it.number) }
             player.setMediaItem(buildMediaItem(url, tracks), positionMs)
             player.prepare()
             player.play()
@@ -276,6 +282,8 @@ class PlayerViewModel(
                 positionMs = positionMs,
                 durationMs = player.duration.coerceAtLeast(0),
                 controlsVisible = true,
+                title = title,
+                episodeLine = episodeLine,
                 subtitleTracks = tracks.toImmutableList(),
                 selectedSubtitleIndex = selectedIndex,
                 subtitleMenuOpen = false,

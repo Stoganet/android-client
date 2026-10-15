@@ -17,10 +17,12 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import com.stoganet.core.api.model.CastMember
+import com.stoganet.core.api.model.EpisodeInfo
 import com.stoganet.core.api.model.LibraryDetail
 import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.core.api.model.PlayInfo
+import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.PlaybackRepository
@@ -91,9 +93,9 @@ class PlayerViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun fakeDetail(play: PlayInfo? = fakePlay()) = LibraryDetail(
+    private fun fakeDetail(play: PlayInfo? = fakePlay(), episode: EpisodeInfo? = null) = LibraryDetail(
         id = "tmdb:movie:603",
-        title = "Test Movie",
+        title = if (episode != null) "Test Episode" else "Test Movie",
         year = 1999,
         type = MediaType.MOVIE,
         poster = "https://img/poster",
@@ -105,6 +107,13 @@ class PlayerViewModelTest {
         cast = listOf(CastMember(name = "Test Actor", role = "Actor")),
         seasons = emptyList(),
         play = play,
+        episode = episode,
+    )
+
+    private fun fakeEpisodeInfo() = EpisodeInfo(
+        series = SeriesRef(id = "jf:show1", title = "Test Show"),
+        seasonNumber = 1,
+        number = 3,
     )
 
     private fun fakePlay(subtitleTracks: List<SubtitleTrack> = emptyList()) = PlayInfo(
@@ -316,6 +325,56 @@ class PlayerViewModelTest {
         testDispatcher.scheduler.runCurrent()
 
         coVerify { playbackRepository.reportProgress("abc123", 3_000L, true) }
+    }
+
+    @Test
+    fun `movie detail shows the movie title without an episode line`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Movie", ready.title)
+        assertNull(ready.episodeLine)
+    }
+
+    @Test
+    fun `episode detail shows the episode title and episode line`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = fakeEpisodeInfo()))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Episode", ready.title)
+        assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), ready.episodeLine)
+    }
+
+    @Test
+    fun `failed detail fetch plays without a title`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("offline"))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertNull(ready.title)
+        assertNull(ready.episodeLine)
+    }
+
+    @Test
+    fun `401 retry keeps the title`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = fakeEpisodeInfo()))
+        coEvery { refreshTokens() } returns true
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Episode", ready.title)
+        assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), ready.episodeLine)
     }
 
     @Test
