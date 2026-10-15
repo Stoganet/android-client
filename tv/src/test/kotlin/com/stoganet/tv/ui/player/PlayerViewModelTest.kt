@@ -332,6 +332,42 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `onIntent Exit right after a seek reports the seek target and drops the pending seek`() =
+        runTest(testDispatcher) {
+            every { player.currentPosition } returns 5_000L
+            every { player.duration } returns 60_000L
+            val vm = newVm()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            vm.onIntent(PlayerIntent.SeekForward())
+            vm.onIntent(PlayerIntent.SeekForward())
+            vm.onIntent(PlayerIntent.Exit)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            coVerify { playbackRepository.reportProgress("abc123", 25_000L, false) }
+            verify(exactly = 0) { player.seekTo(any()) }
+        }
+
+    @Test
+    fun `401 retry drops a pending seek`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 60_000L
+        coEvery { refreshTokens() } returns true
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.seekTo(any()) }
+        assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
+    }
+
+    @Test
     fun `onIntent Exit does not double-report when stop fires isPlaying changed`() = runTest(testDispatcher) {
         val listenerSlot = slot<Player.Listener>()
         every { player.addListener(capture(listenerSlot)) } just Runs

@@ -211,14 +211,23 @@ class PlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
+    // A seek still waiting to commit is where the user meant to be, so report that instead
     private fun exit() {
         isExiting = true
         stopTick()
         stopUiTick()
+        val positionMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
+        cancelPendingSeek()
         viewModelScope.launch {
-            withContext(NonCancellable) { reportProgressSuspend(played = false) }
+            withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
         }
         player.stop()
+    }
+
+    private fun cancelPendingSeek() {
+        seekCommitJob?.cancel()
+        seekCommitJob = null
+        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = null) else s }
     }
 
     // Always fetches detail, even with a streamUrl already given, since subtitle_tracks only
@@ -284,6 +293,7 @@ class PlayerViewModel(
             return
         }
         hasRetriedAfterAuthError = true
+        cancelPendingSeek()
         val resumeMs = player.currentPosition
         viewModelScope.launch {
             if (!refreshTokens()) {
@@ -369,9 +379,9 @@ class PlayerViewModel(
         viewModelScope.launch { reportProgressSuspend(played) }
     }
 
-    private suspend fun reportProgressSuspend(played: Boolean) {
+    private suspend fun reportProgressSuspend(played: Boolean, positionMs: Long = player.currentPosition) {
         val jfId = currentStreamUrl?.substringAfterLast("/") ?: return
-        playbackRepository.reportProgress(jfId, player.currentPosition, played)
+        playbackRepository.reportProgress(jfId, positionMs, played)
     }
 
     override fun onCleared() {
