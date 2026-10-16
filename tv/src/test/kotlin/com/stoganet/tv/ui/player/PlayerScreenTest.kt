@@ -2,18 +2,24 @@ package com.stoganet.tv.ui.player
 
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.v2.runAndroidComposeUiTest
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ApplicationProvider
 import com.stoganet.tv.R
@@ -22,6 +28,7 @@ import io.mockk.mockk
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -167,6 +174,147 @@ class PlayerScreenTest {
 
         mainClock.advanceTimeBy(600L)
         onNode(spinner).assertIsDisplayed()
+    }
+
+    @Test
+    fun readyState_episode_showsEpisodeTitleAndEpisodeLine() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    title = "Test Episode",
+                    episodeLine = EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3),
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        onNodeWithText("Test Episode").assertIsDisplayed()
+        onNodeWithText("Test Show · S1:E3").assertIsDisplayed()
+    }
+
+    @Test
+    fun readyState_movie_showsTitleWithoutEpisodeLine() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    title = "Test Movie",
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        onNodeWithText("Test Movie").assertIsDisplayed()
+        onNodeWithText(":E", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun readyState_withNextEpisode_nextButtonOpensIt() = runComposeUiTest {
+        var opened: NextEpisodeUi? = null
+        val next = NextEpisodeUi(id = "jf:ep4", positionMs = 0L)
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    nextEpisode = next,
+                ),
+                onBack = {},
+                player = mockPlayer,
+                onNextEpisode = { opened = it },
+            )
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val nextButton = onNodeWithContentDescription(ctx.getString(R.string.player_next_episode_content_description))
+        nextButton.requestFocus()
+        nextButton.performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(next, opened)
+    }
+
+    @Test
+    fun readyState_withoutNextEpisode_hasNoNextButton() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        onNodeWithContentDescription(ctx.getString(R.string.player_next_episode_content_description))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun leavingScreen_nextButtonIsIgnored() = runComposeUiTest {
+        var opened: NextEpisodeUi? = null
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides leavingLifecycleOwner()) {
+                PlayerScreen(
+                    state = PlayerUiState.Ready(
+                        isPlaying = true,
+                        positionMs = 0L,
+                        durationMs = 100_000L,
+                        controlsVisible = true,
+                        nextEpisode = NextEpisodeUi(id = "jf:ep4", positionMs = 0L),
+                    ),
+                    onBack = {},
+                    player = mockPlayer,
+                    onNextEpisode = { opened = it },
+                )
+            }
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val nextButton = onNodeWithContentDescription(ctx.getString(R.string.player_next_episode_content_description))
+        nextButton.requestFocus()
+        nextButton.performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertNull(opened)
+    }
+
+    @Test
+    fun leavingScreen_backButtonIsIgnored() = runComposeUiTest {
+        var backCalled = false
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides leavingLifecycleOwner()) {
+                PlayerScreen(state = PlayerUiState.Error, onBack = { backCalled = true }, player = mockPlayer)
+            }
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val backDesc = ctx.getString(R.string.player_back_content_description)
+        onNodeWithText(backDesc).requestFocus()
+        onNodeWithText(backDesc).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertFalse(backCalled)
+    }
+
+    // A screen on its way out, like the old player while the next one fades in
+    private fun leavingLifecycleOwner(): LifecycleOwner = object : LifecycleOwner {
+        override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.STARTED }
     }
 
     private fun press(

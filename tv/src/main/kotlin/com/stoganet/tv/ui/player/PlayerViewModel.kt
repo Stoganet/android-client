@@ -1,6 +1,5 @@
 package com.stoganet.tv.ui.player
 
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -8,8 +7,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.listenTo
@@ -56,8 +53,7 @@ class PlayerViewModel(
     private val _state = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
-    private var currentStreamUrl: String? = streamUrl
-    private var currentSubtitleTracks: List<SubtitleTrackUi> = emptyList()
+    private var source: PlaybackSource? = null
     private var desiredSubtitleIndex: Int? = null
     private var tickJob: Job? = null
     private var uiTickJob: Job? = null
@@ -134,20 +130,20 @@ class PlayerViewModel(
             showControls()
             return
         }
-        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = target) else s }
+        updateReady { copy(seekPreviewMs = target) }
         showControls()
 
         seekCommitJob?.cancel()
         seekCommitJob = viewModelScope.launch {
             delay(SEEK_COMMIT_DELAY_MS.milliseconds)
             player.seekTo(target)
-            _state.update { s -> if (s is PlayerUiState.Ready) s.copy(seekPreviewMs = null) else s }
+            updateReady { copy(seekPreviewMs = null) }
             updatePlaybackPosition()
         }
     }
 
     private fun showControls() {
-        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(controlsVisible = true) else s }
+        updateReady { copy(controlsVisible = true) }
         scheduleHideControls()
     }
 
@@ -155,21 +151,17 @@ class PlayerViewModel(
         hideControlsJob?.cancel()
         hideControlsJob = viewModelScope.launch {
             delay(CONTROLS_HIDE_DELAY_MS.milliseconds)
-            _state.update { s ->
-                if (s is PlayerUiState.Ready && !s.subtitleMenuOpen) s.copy(controlsVisible = false) else s
-            }
+            updateReady { if (subtitleMenuOpen) this else copy(controlsVisible = false) }
         }
     }
 
     private fun openSubtitleMenu() {
         hideControlsJob?.cancel()
-        _state.update { s ->
-            if (s is PlayerUiState.Ready) s.copy(subtitleMenuOpen = true, controlsVisible = true) else s
-        }
+        updateReady { copy(subtitleMenuOpen = true, controlsVisible = true) }
     }
 
     private fun closeSubtitleMenu() {
-        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(subtitleMenuOpen = false) else s }
+        updateReady { copy(subtitleMenuOpen = false) }
         scheduleHideControls()
     }
 
@@ -181,15 +173,13 @@ class PlayerViewModel(
         if (language != null) {
             viewModelScope.launch { subtitlePreferenceStore.savePreferredLanguage(language) }
         }
-        _state.update { s ->
-            if (s is PlayerUiState.Ready) s.copy(selectedSubtitleIndex = index, subtitleMenuOpen = false) else s
-        }
+        updateReady { copy(selectedSubtitleIndex = index, subtitleMenuOpen = false) }
         scheduleHideControls()
     }
 
     // Matches by Format.id, not language, so same-language tracks (muxed + external .srt) stay
     // distinguishable. MergingMediaSource prefixes each merged Format.id with "childIndex:", so
-    // only the suffix (the id we set via .setId() in buildMediaItem, always a plain track.index
+    // only the suffix (the id we set via .setId() in toMediaItem, always a plain track.index
     // int with no colon of its own) is compared. Re-run on EVENT_TRACKS_CHANGED since tracks
     // aren't known right after prepare().
     private fun applyDesiredSubtitleTrack() {
@@ -211,63 +201,68 @@ class PlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
+    // A pending seek is where the user meant to be, and before playback starts there is no position worth saving
     private fun exit() {
         isExiting = true
         stopTick()
         stopUiTick()
-        viewModelScope.launch {
-            withContext(NonCancellable) { reportProgressSuspend(played = false) }
+        val ready = _state.value as? PlayerUiState.Ready
+        val positionMs = ready?.seekPreviewMs ?: player.currentPosition
+        cancelPendingSeek()
+        if (ready != null) {
+            viewModelScope.launch {
+                withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
+            }
         }
         player.stop()
+        // Next episode builds its player before this ViewModel is cleared, and two live sessions can't share an id
+        mediaSession.release()
     }
 
-    // Always fetches detail, even with a streamUrl already given, since subtitle_tracks only
-    // comes from here. Falls back to the given streamUrl so episodes/resume/failed fetches still play.
+    private fun cancelPendingSeek() {
+        seekCommitJob?.cancel()
+        seekCommitJob = null
+        updateReady { copy(seekPreviewMs = null) }
+    }
+
+    // Always fetches detail, even with a streamUrl already given, since title and subtitle tracks only come from here
     private fun loadAndPrepare() {
         viewModelScope.launch {
-            val play = repository.getDetail(id).getOrNull()?.play
-            val url = streamUrl ?: play?.streamUrl
-            if (url == null) {
+            val detail = repository.getDetail(id).getOrNull()
+            val preferredLanguage = subtitlePreferenceStore.current()
+            // The user may have left while these loaded
+            if (isExiting) return@launch
+            val loaded = playbackSource(detail, streamUrl)
+            if (loaded == null) {
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
-            val tracks = play?.subtitleTracks.orEmpty().map {
-                SubtitleTrackUi(it.index, it.language, it.title, it.isDefault)
-            }
-            currentStreamUrl = url
-            currentSubtitleTracks = tracks
-            player.setMediaItem(buildMediaItem(url, tracks), positionMs)
-            player.prepare()
-            player.play()
-            val preferredLanguage = subtitlePreferenceStore.current()
-            val initialTrack = tracks.firstOrNull { it.language == preferredLanguage }
-                ?: tracks.firstOrNull { it.isDefault }
+            source = loaded
+            val initialTrack = initialSubtitle(loaded.subtitleTracks, preferredLanguage)
             desiredSubtitleIndex = initialTrack?.index
+            startPlayback(loaded, positionMs)
             applyDesiredSubtitleTrack()
-            emitReady(positionMs = positionMs, tracks = tracks, selectedIndex = initialTrack?.index)
+            emitReady(loaded, positionMs = positionMs, selectedIndex = initialTrack?.index)
         }
     }
 
-    private fun buildMediaItem(streamUrl: String, tracks: List<SubtitleTrackUi>): MediaItem {
-        val subtitleConfigs = tracks.map { track ->
-            MediaItem.SubtitleConfiguration.Builder("$streamUrl/subtitles/${track.index}".toUri())
-                .setMimeType(MimeTypes.TEXT_VTT)
-                .setLanguage(track.language)
-                .setLabel(track.title)
-                .setId(track.index.toString())
-                .build()
-        }
-        return MediaItem.Builder().setUri(streamUrl).setSubtitleConfigurations(subtitleConfigs).build()
+    private fun startPlayback(source: PlaybackSource, positionMs: Long) {
+        player.setMediaItem(source.toMediaItem(), positionMs)
+        player.prepare()
+        player.play()
     }
 
-    private fun emitReady(positionMs: Long, tracks: List<SubtitleTrackUi>, selectedIndex: Int?) {
+    private fun emitReady(source: PlaybackSource, positionMs: Long, selectedIndex: Int?) {
         _state.update {
             PlayerUiState.Ready(
                 isPlaying = true,
                 positionMs = positionMs,
                 durationMs = player.duration.coerceAtLeast(0),
                 controlsVisible = true,
-                subtitleTracks = tracks.toImmutableList(),
+                title = source.title,
+                episodeLine = source.episodeLine,
+                nextEpisode = source.nextEpisode,
+                subtitleTracks = source.subtitleTracks.toImmutableList(),
                 selectedSubtitleIndex = selectedIndex,
                 subtitleMenuOpen = false,
             )
@@ -278,44 +273,26 @@ class PlayerViewModel(
     // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
     // sees Ktor's Auth plugin, so a 401 here needs its own refresh-and-retry, once.
     private fun handlePlayerError() {
-        val url = currentStreamUrl
-        if (hasRetriedAfterAuthError || url == null || !isUnauthorized(player.playerError)) {
+        val current = source
+        if (hasRetriedAfterAuthError || current == null || !isUnauthorized(player.playerError)) {
             _state.update { PlayerUiState.Error }
             return
         }
         hasRetriedAfterAuthError = true
-        val resumeMs = player.currentPosition
+        val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
+        cancelPendingSeek()
         viewModelScope.launch {
-            if (!refreshTokens()) {
+            val refreshed = refreshTokens()
+            if (isExiting) return@launch
+            if (!refreshed) {
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
-            player.setMediaItem(buildMediaItem(url, currentSubtitleTracks), resumeMs)
-            player.prepare()
-            player.play()
+            startPlayback(current, resumeMs)
             val ready = _state.value as? PlayerUiState.Ready
-            emitReady(
-                positionMs = resumeMs,
-                tracks = currentSubtitleTracks,
-                selectedIndex = ready?.selectedSubtitleIndex,
-            )
+            emitReady(current, positionMs = resumeMs, selectedIndex = ready?.selectedSubtitleIndex)
             applyDesiredSubtitleTrack()
         }
-    }
-
-    private fun isUnauthorized(error: Throwable?): Boolean {
-        var cause: Throwable? = error
-        var depth = 0
-        while (cause != null && depth < MAX_CAUSE_CHAIN_DEPTH) {
-            if (cause is HttpDataSource.InvalidResponseCodeException &&
-                cause.responseCode == UNAUTHORIZED_STATUS_CODE
-            ) {
-                return true
-            }
-            cause = cause.cause
-            depth++
-        }
-        return false
     }
 
     private fun startTick() {
@@ -348,30 +325,31 @@ class PlayerViewModel(
 
     private fun updateBuffering() {
         val isBuffering = player.playbackState == Player.STATE_BUFFERING
-        _state.update { s -> if (s is PlayerUiState.Ready) s.copy(isBuffering = isBuffering) else s }
+        updateReady { copy(isBuffering = isBuffering) }
     }
 
     private fun updatePlaybackPosition() {
-        _state.update { s ->
-            if (s is PlayerUiState.Ready) {
-                s.copy(
-                    isPlaying = player.isPlaying,
-                    positionMs = player.currentPosition,
-                    durationMs = player.duration.coerceAtLeast(0),
-                )
-            } else {
-                s
-            }
+        updateReady {
+            copy(
+                isPlaying = player.isPlaying,
+                positionMs = player.currentPosition,
+                durationMs = player.duration.coerceAtLeast(0),
+            )
         }
+    }
+
+    // Changes only a Ready state, so Loading and Error are never overwritten
+    private inline fun updateReady(crossinline transform: PlayerUiState.Ready.() -> PlayerUiState.Ready) {
+        _state.update { s -> if (s is PlayerUiState.Ready) s.transform() else s }
     }
 
     private fun reportProgress(played: Boolean) {
         viewModelScope.launch { reportProgressSuspend(played) }
     }
 
-    private suspend fun reportProgressSuspend(played: Boolean) {
-        val jfId = currentStreamUrl?.substringAfterLast("/") ?: return
-        playbackRepository.reportProgress(jfId, player.currentPosition, played)
+    private suspend fun reportProgressSuspend(played: Boolean, positionMs: Long = player.currentPosition) {
+        val jfId = (source?.streamUrl ?: streamUrl)?.substringAfterLast("/") ?: return
+        playbackRepository.reportProgress(jfId, positionMs, played)
     }
 
     override fun onCleared() {
@@ -385,8 +363,6 @@ class PlayerViewModel(
         private const val CONTROLS_HIDE_DELAY_MS = 3_000L
         private const val SEEK_COMMIT_DELAY_MS = 700L
         private const val SEEK_END_MARGIN_MS = 10_000L
-        private const val UNAUTHORIZED_STATUS_CODE = 401
-        private const val MAX_CAUSE_CHAIN_DEPTH = 10
 
         @androidx.annotation.OptIn(UnstableApi::class)
         fun factory(id: String, streamUrl: String? = null, positionMs: Long = 0L): ViewModelProvider.Factory =
@@ -425,6 +401,11 @@ class PlayerViewModel(
     }
 }
 
+// ExoPlayer wraps the HTTP error in one or more causes, and the cap stops a cause chain that loops back on itself
+private fun isUnauthorized(error: Throwable?): Boolean = generateSequence(error) { it.cause }
+    .take(MAX_CAUSE_CHAIN_DEPTH)
+    .any { it is HttpDataSource.InvalidResponseCodeException && it.responseCode == UNAUTHORIZED_STATUS_CODE }
+
 private data class SeekTier(val fromRepeat: Int, val stepMs: Long)
 
 // Android TV repeats a held key about 20 times per second, so each tier starts roughly a second later
@@ -436,3 +417,6 @@ private val SEEK_TIERS = listOf(
 )
 
 internal fun seekStepMs(repeatCount: Int): Long = SEEK_TIERS.last { repeatCount >= it.fromRepeat }.stepMs
+
+private const val UNAUTHORIZED_STATUS_CODE = 401
+private const val MAX_CAUSE_CHAIN_DEPTH = 10

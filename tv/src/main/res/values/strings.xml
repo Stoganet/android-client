@@ -55,7 +55,9 @@
     <string name="player_play_content_description">Play</string>
     <string name="player_pause_content_description">Pause</string>
     <string name="player_subtitles_content_description">Subtitles</string>
+    <string name="player_next_episode_content_description">Next episode</string>
     <string name="player_seek_bar_content_description">Seek bar</string>
+    <string name="player_episode_line">%1$s · S%2$d:E%3$d</string>
     <string name="player_subtitles_off">Off</string>
     <string name="player_subtitles_menu_content_description">Subtitle track list</string>
     <plurals name="detail_seasons_label">

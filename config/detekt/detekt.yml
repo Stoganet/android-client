@@ -4,6 +4,8 @@ naming:
       - 'Composable'
 
 complexity:
+  LargeClass:
+    excludes: ['**/test/**']
   LongParameterList:
     allowedFunctionParameters: 8
     allowedConstructorParameters: 8

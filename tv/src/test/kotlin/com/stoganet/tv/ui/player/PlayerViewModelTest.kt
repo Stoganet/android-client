@@ -17,10 +17,13 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import com.stoganet.core.api.model.CastMember
+import com.stoganet.core.api.model.EpisodeInfo
 import com.stoganet.core.api.model.LibraryDetail
 import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.api.model.NextEpisode
 import com.stoganet.core.api.model.PlayInfo
+import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.PlaybackRepository
@@ -35,6 +38,7 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -49,6 +53,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Uses [StandardTestDispatcher], not Unconfined: PlayerViewModel's periodic-tick loop relies on
@@ -91,9 +96,9 @@ class PlayerViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun fakeDetail(play: PlayInfo? = fakePlay()) = LibraryDetail(
+    private fun fakeDetail(play: PlayInfo? = fakePlay(), episode: EpisodeInfo? = null) = LibraryDetail(
         id = "tmdb:movie:603",
-        title = "Test Movie",
+        title = if (episode != null) "Test Episode" else "Test Movie",
         year = 1999,
         type = MediaType.MOVIE,
         poster = "https://img/poster",
@@ -105,6 +110,13 @@ class PlayerViewModelTest {
         cast = listOf(CastMember(name = "Test Actor", role = "Actor")),
         seasons = emptyList(),
         play = play,
+        episode = episode,
+    )
+
+    private fun fakeEpisodeInfo() = EpisodeInfo(
+        series = SeriesRef(id = "jf:show1", title = "Test Show"),
+        seasonNumber = 1,
+        number = 3,
     )
 
     private fun fakePlay(subtitleTracks: List<SubtitleTrack> = emptyList()) = PlayInfo(
@@ -319,6 +331,68 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `movie detail shows the movie title without an episode line`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Movie", ready.title)
+        assertNull(ready.episodeLine)
+    }
+
+    @Test
+    fun `episode detail shows the episode title and episode line`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = fakeEpisodeInfo()))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Episode", ready.title)
+        assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), ready.episodeLine)
+    }
+
+    @Test
+    fun `episode with a next episode exposes it to the controls`() = runTest(testDispatcher) {
+        val episode = fakeEpisodeInfo().copy(
+            next = NextEpisode(id = "jf:ep4", seasonNumber = 1, number = 4, title = "Next Title"),
+        )
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = episode))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(NextEpisodeUi(id = "jf:ep4", positionMs = 0L), (vm.state.value as PlayerUiState.Ready).nextEpisode)
+    }
+
+    @Test
+    fun `failed detail fetch plays without a title`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("offline"))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertNull(ready.title)
+        assertNull(ready.episodeLine)
+    }
+
+    @Test
+    fun `401 retry keeps the title`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = fakeEpisodeInfo()))
+        coEvery { refreshTokens() } returns true
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Test Episode", ready.title)
+        assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), ready.episodeLine)
+    }
+
+    @Test
     fun `onIntent Exit stops player and reports final progress`() = runTest(testDispatcher) {
         every { player.currentPosition } returns 4_000L
         val vm = newVm()
@@ -329,6 +403,96 @@ class PlayerViewModelTest {
 
         verify { player.stop() }
         coVerify { playbackRepository.reportProgress("abc123", 4_000L, false) }
+    }
+
+    @Test
+    fun `onIntent Exit while loading keeps the saved position`() = runTest(testDispatcher) {
+        val vm = newVm()
+
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), any()) }
+    }
+
+    @Test
+    fun `detail arriving after exit does not start playback`() = runTest(testDispatcher) {
+        val vm = newVm()
+
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        verify(exactly = 0) { player.play() }
+        assertTrue(vm.state.value is PlayerUiState.Loading)
+    }
+
+    @Test
+    fun `onIntent Exit releases the media session`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.Exit)
+
+        verify { mediaSession.release() }
+    }
+
+    @Test
+    fun `onIntent Exit right after a seek reports the seek target and drops the pending seek`() =
+        runTest(testDispatcher) {
+            every { player.currentPosition } returns 5_000L
+            every { player.duration } returns 60_000L
+            val vm = newVm()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            vm.onIntent(PlayerIntent.SeekForward())
+            vm.onIntent(PlayerIntent.SeekForward())
+            vm.onIntent(PlayerIntent.Exit)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            coVerify { playbackRepository.reportProgress("abc123", 25_000L, false) }
+            verify(exactly = 0) { player.seekTo(any()) }
+        }
+
+    @Test
+    fun `401 retry does not restart playback after exit`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        coEvery { refreshTokens() } coAnswers {
+            delay(1_000L.milliseconds)
+            true
+        }
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.runCurrent()
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        verify(exactly = 1) { player.play() }
+    }
+
+    @Test
+    fun `401 retry resumes at a pending seek target`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 60_000L
+        coEvery { refreshTokens() } returns true
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.seekTo(any()) }
+        verify { player.setMediaItem(any<MediaItem>(), 15_000L) }
+        assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 
     @Test
