@@ -10,6 +10,9 @@ data class SubtitleTrackUi(val index: Int, val language: String, val title: Stri
 @Immutable
 data class EpisodeLineUi(val seriesTitle: String, val seasonNumber: Int, val number: Int)
 
+@Immutable
+data class NextEpisodeUi(val id: String, val positionMs: Long)
+
 sealed interface PlayerUiState {
     @Immutable data object Loading : PlayerUiState
 
@@ -23,6 +26,7 @@ sealed interface PlayerUiState {
         val controlsVisible: Boolean,
         val title: String? = null,
         val episodeLine: EpisodeLineUi? = null,
+        val nextEpisode: NextEpisodeUi? = null,
         val isBuffering: Boolean = false,
         val subtitleTracks: ImmutableList<SubtitleTrackUi> = persistentListOf(),
         val selectedSubtitleIndex: Int? = null,

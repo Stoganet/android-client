@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -208,6 +209,54 @@ class PlayerScreenTest {
 
         onNodeWithText("Test Movie").assertIsDisplayed()
         onNodeWithText(":E", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun readyState_withNextEpisode_nextButtonOpensIt() = runComposeUiTest {
+        var opened: NextEpisodeUi? = null
+        val next = NextEpisodeUi(id = "jf:ep4", positionMs = 0L)
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                    nextEpisode = next,
+                ),
+                onBack = {},
+                player = mockPlayer,
+                onNextEpisode = { opened = it },
+            )
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val nextButton = onNodeWithContentDescription(ctx.getString(R.string.player_next_episode_content_description))
+        nextButton.requestFocus()
+        nextButton.performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+
+        assertEquals(next, opened)
+    }
+
+    @Test
+    fun readyState_withoutNextEpisode_hasNoNextButton() = runComposeUiTest {
+        setContent {
+            PlayerScreen(
+                state = PlayerUiState.Ready(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 100_000L,
+                    controlsVisible = true,
+                ),
+                onBack = {},
+                player = mockPlayer,
+            )
+        }
+
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        onNodeWithContentDescription(ctx.getString(R.string.player_next_episode_content_description))
+            .assertDoesNotExist()
     }
 
     private fun press(

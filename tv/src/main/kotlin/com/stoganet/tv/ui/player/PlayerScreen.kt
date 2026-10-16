@@ -48,6 +48,7 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
     player: ExoPlayer? = null,
     onIntent: (PlayerIntent) -> Unit = {},
+    onNextEpisode: (NextEpisodeUi) -> Unit = {},
 ) {
     BackHandler(
         onBack = {
@@ -89,6 +90,7 @@ fun PlayerScreen(
             state = state,
             player = player,
             onIntent = onIntent,
+            onNextEpisode = onNextEpisode,
             modifier = modifier,
         )
     }
@@ -99,6 +101,7 @@ private fun ReadyPlayerContent(
     state: PlayerUiState.Ready,
     player: ExoPlayer?,
     onIntent: (PlayerIntent) -> Unit,
+    onNextEpisode: (NextEpisodeUi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val surfaceFocusRequester = remember { FocusRequester() }
@@ -135,6 +138,7 @@ private fun ReadyPlayerContent(
             ControlsOverlay(
                 state = state,
                 onIntent = onIntent,
+                onNextEpisode = onNextEpisode,
                 focusRequester = controlsFocusRequester,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
@@ -266,6 +270,7 @@ private fun PreviewPlayerReadyPaused() {
             controlsVisible = true,
             title = "Test Episode",
             episodeLine = EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 2),
+            nextEpisode = NextEpisodeUi(id = "jf:ep3", positionMs = 0L),
         ),
         onBack = {},
     )

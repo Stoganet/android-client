@@ -50,12 +50,14 @@ import kotlin.time.Duration.Companion.milliseconds
 internal fun ControlsOverlay(
     state: PlayerUiState.Ready,
     onIntent: (PlayerIntent) -> Unit,
+    onNextEpisode: (NextEpisodeUi) -> Unit,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val playLabel = stringResource(R.string.player_play_content_description)
     val pauseLabel = stringResource(R.string.player_pause_content_description)
     val subtitlesLabel = stringResource(R.string.player_subtitles_content_description)
+    val nextEpisodeLabel = stringResource(R.string.player_next_episode_content_description)
 
     Column(
         modifier = modifier
@@ -83,6 +85,14 @@ internal fun ControlsOverlay(
                 label = if (state.isPlaying) pauseLabel else playLabel,
                 onClick = { onIntent(PlayerIntent.TogglePlayPause) },
             )
+            if (state.nextEpisode != null) {
+                Spacer(Modifier.width(16.dp))
+                PlayerIconButton(
+                    iconRes = R.drawable.ic_skip_next,
+                    label = nextEpisodeLabel,
+                    onClick = { onNextEpisode(state.nextEpisode) },
+                )
+            }
             Spacer(Modifier.weight(1f))
             PlayerIconButton(
                 iconRes = R.drawable.ic_subtitles,

@@ -212,6 +212,8 @@ class PlayerViewModel(
             withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
         }
         player.stop()
+        // Next episode builds its player before this ViewModel is cleared, and two live sessions can't share an id
+        mediaSession.release()
     }
 
     private fun cancelPendingSeek() {
@@ -252,6 +254,7 @@ class PlayerViewModel(
                 controlsVisible = true,
                 title = source.title,
                 episodeLine = source.episodeLine,
+                nextEpisode = source.nextEpisode,
                 subtitleTracks = source.subtitleTracks.toImmutableList(),
                 selectedSubtitleIndex = selectedIndex,
                 subtitleMenuOpen = false,

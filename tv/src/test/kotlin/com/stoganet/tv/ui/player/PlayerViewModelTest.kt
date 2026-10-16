@@ -21,6 +21,7 @@ import com.stoganet.core.api.model.EpisodeInfo
 import com.stoganet.core.api.model.LibraryDetail
 import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.api.model.NextEpisode
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
@@ -349,6 +350,18 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `episode with a next episode exposes it to the controls`() = runTest(testDispatcher) {
+        val episode = fakeEpisodeInfo().copy(
+            next = NextEpisode(id = "jf:ep4", seasonNumber = 1, number = 4, title = "Next Title"),
+        )
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(episode = episode))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(NextEpisodeUi(id = "jf:ep4", positionMs = 0L), (vm.state.value as PlayerUiState.Ready).nextEpisode)
+    }
+
+    @Test
     fun `failed detail fetch plays without a title`() = runTest(testDispatcher) {
         coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("offline"))
         val vm = newVm()
@@ -388,6 +401,16 @@ class PlayerViewModelTest {
 
         verify { player.stop() }
         coVerify { playbackRepository.reportProgress("abc123", 4_000L, false) }
+    }
+
+    @Test
+    fun `onIntent Exit releases the media session`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.Exit)
+
+        verify { mediaSession.release() }
     }
 
     @Test

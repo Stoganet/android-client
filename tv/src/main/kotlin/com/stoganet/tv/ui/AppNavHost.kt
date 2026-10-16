@@ -179,6 +179,12 @@ fun AppNavHost() {
                 },
                 player = vm.player,
                 onIntent = vm::onIntent,
+                onNextEpisode = { next ->
+                    vm.onIntent(PlayerIntent.Exit)
+                    navController.navigate(AppRoutes.player(next.id, positionMs = next.positionMs)) {
+                        popUpTo(AppRoutes.PLAYER) { inclusive = true }
+                    }
+                },
             )
         }
     }

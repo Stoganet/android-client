@@ -11,6 +11,7 @@ internal data class PlaybackSource(
     val subtitleTracks: List<SubtitleTrackUi>,
     val title: String?,
     val episodeLine: EpisodeLineUi?,
+    val nextEpisode: NextEpisodeUi?,
 )
 
 // The route's stream wins so a failed detail fetch still plays, just without title or subtitles
@@ -22,6 +23,10 @@ internal fun playbackSource(detail: LibraryDetail?, routeStreamUrl: String?): Pl
             .map { SubtitleTrackUi(it.index, it.language, it.title, it.isDefault) },
         title = detail?.title,
         episodeLine = detail?.episode?.let { EpisodeLineUi(it.series.title, it.seasonNumber, it.number) },
+        nextEpisode = detail?.episode?.next?.let { next ->
+            val progress = next.progress
+            NextEpisodeUi(next.id, if (progress == null || progress.played) 0L else progress.positionMs)
+        },
     )
 }
 

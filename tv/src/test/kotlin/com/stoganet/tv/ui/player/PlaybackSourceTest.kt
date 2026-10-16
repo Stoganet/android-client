@@ -4,9 +4,11 @@ import com.stoganet.core.api.model.EpisodeInfo
 import com.stoganet.core.api.model.LibraryDetail
 import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
+import com.stoganet.core.api.model.NextEpisode
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
+import com.stoganet.core.api.model.WatchProgress
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -32,6 +34,16 @@ class PlaybackSourceTest {
         play = play,
         episode = episode,
     )
+
+    private fun episode(next: NextEpisode? = null) = EpisodeInfo(
+        series = SeriesRef(id = "jf:show1", title = "Test Show"),
+        seasonNumber = 1,
+        number = 3,
+        next = next,
+    )
+
+    private fun next(progress: WatchProgress? = null) =
+        NextEpisode(id = "jf:ep4", seasonNumber = 1, number = 4, title = "Next Title", progress = progress)
 
     private fun track(index: Int, language: String, isDefault: Boolean = false) =
         SubtitleTrackUi(index = index, language = language, title = language, isDefault = isDefault)
@@ -60,7 +72,7 @@ class PlaybackSourceTest {
     fun failedDetail_playsRouteStreamWithoutTitleOrTracks() {
         val source = playbackSource(null, routeStreamUrl = "https://api.stoganet.com/stream/route")
 
-        assertEquals(PlaybackSource("https://api.stoganet.com/stream/route", emptyList(), null, null), source)
+        assertEquals(PlaybackSource("https://api.stoganet.com/stream/route", emptyList(), null, null, null), source)
     }
 
     @Test
@@ -87,16 +99,41 @@ class PlaybackSourceTest {
 
     @Test
     fun episode_hasEpisodeLine() {
-        val episode = EpisodeInfo(
-            series = SeriesRef(id = "jf:show1", title = "Test Show"),
-            seasonNumber = 1,
-            number = 3,
-        )
-
-        val source = playbackSource(detail(episode = episode), routeStreamUrl = null)
+        val source = playbackSource(detail(episode = episode()), routeStreamUrl = null)
 
         assertEquals("Test Title", source?.title)
         assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), source?.episodeLine)
+    }
+
+    @Test
+    fun nextEpisode_partlyWatched_resumesAtItsProgress() {
+        val episode = episode(next(WatchProgress(positionMs = 120_000L, played = false)))
+
+        val source = playbackSource(detail(episode = episode), routeStreamUrl = null)
+
+        assertEquals(NextEpisodeUi(id = "jf:ep4", positionMs = 120_000L), source?.nextEpisode)
+    }
+
+    @Test
+    fun nextEpisode_alreadyWatched_startsFromBeginning() {
+        val episode = episode(next(WatchProgress(positionMs = 120_000L, played = true)))
+
+        val source = playbackSource(detail(episode = episode), routeStreamUrl = null)
+
+        assertEquals(NextEpisodeUi(id = "jf:ep4", positionMs = 0L), source?.nextEpisode)
+    }
+
+    @Test
+    fun nextEpisode_neverWatched_startsFromBeginning() {
+        val source = playbackSource(detail(episode = episode(next())), routeStreamUrl = null)
+
+        assertEquals(NextEpisodeUi(id = "jf:ep4", positionMs = 0L), source?.nextEpisode)
+    }
+
+    @Test
+    fun lastEpisodeOrMovie_hasNoNextEpisode() {
+        assertNull(playbackSource(detail(episode = episode()), routeStreamUrl = null)?.nextEpisode)
+        assertNull(playbackSource(detail(), routeStreamUrl = null)?.nextEpisode)
     }
 
     @Test
