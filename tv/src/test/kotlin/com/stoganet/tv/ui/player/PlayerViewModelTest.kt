@@ -38,6 +38,7 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -52,6 +53,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Uses [StandardTestDispatcher], not Unconfined: PlayerViewModel's periodic-tick loop relies on
@@ -451,6 +453,27 @@ class PlayerViewModelTest {
             coVerify { playbackRepository.reportProgress("abc123", 25_000L, false) }
             verify(exactly = 0) { player.seekTo(any()) }
         }
+
+    @Test
+    fun `401 retry does not restart playback after exit`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        coEvery { refreshTokens() } coAnswers {
+            delay(1_000L.milliseconds)
+            true
+        }
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playerError } returns unauthorizedException()
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        testDispatcher.scheduler.runCurrent()
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        verify(exactly = 1) { player.play() }
+    }
 
     @Test
     fun `401 retry resumes at a pending seek target`() = runTest(testDispatcher) {

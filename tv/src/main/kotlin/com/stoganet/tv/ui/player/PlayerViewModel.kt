@@ -282,7 +282,9 @@ class PlayerViewModel(
         val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
         cancelPendingSeek()
         viewModelScope.launch {
-            if (!refreshTokens()) {
+            val refreshed = refreshTokens()
+            if (isExiting) return@launch
+            if (!refreshed) {
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
