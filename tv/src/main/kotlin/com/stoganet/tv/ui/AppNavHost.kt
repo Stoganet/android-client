@@ -165,11 +165,8 @@ fun AppNavHost() {
                     defaultValue = 0L
                 },
             ),
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getString("id") ?: return@composable
-            val streamUrl = backStackEntry.arguments?.getString("streamUrl")
-            val positionMs = backStackEntry.arguments?.getLong("positionMs") ?: 0L
-            val vm: PlayerViewModel = viewModel(factory = PlayerViewModel.factory(id, streamUrl, positionMs))
+        ) {
+            val vm: PlayerViewModel = viewModel(factory = PlayerViewModel.Factory)
             val state by vm.state.collectAsStateWithLifecycle()
             PlayerScreen(
                 state = state,

@@ -1,8 +1,10 @@
 package com.stoganet.tv.ui.player
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -39,28 +41,28 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerViewModel(
-    private val id: String,
+    savedStateHandle: SavedStateHandle,
     private val repository: DetailRepository,
     private val playbackRepository: PlaybackRepository,
     private val subtitlePreferenceStore: SubtitlePreferenceStore,
     val player: ExoPlayer,
     private val mediaSession: MediaSession,
     private val refreshTokens: suspend () -> Boolean,
-    private val streamUrl: String? = null,
-    private val positionMs: Long = 0L,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
-    private var source: PlaybackSource? = null
-    private var desiredSubtitleIndex: Int? = null
+    private var item = NowPlaying(
+        id = checkNotNull(savedStateHandle[KEY_ID]),
+        routeStreamUrl = savedStateHandle[KEY_STREAM_URL],
+        startPositionMs = savedStateHandle[KEY_POSITION_MS] ?: 0L,
+    )
     private var tickJob: Job? = null
     private var uiTickJob: Job? = null
     private var hideControlsJob: Job? = null
     private var seekCommitJob: Job? = null
     private var isExiting = false
-    private var hasRetriedAfterAuthError = false
 
     init {
         viewModelScope.launch {
@@ -167,7 +169,7 @@ class PlayerViewModel(
 
     private fun selectSubtitleTrack(index: Int?) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
-        desiredSubtitleIndex = index
+        item = item.copy(desiredSubtitleIndex = index)
         applyDesiredSubtitleTrack()
         val language = ready.subtitleTracks.firstOrNull { it.index == index }?.language
         if (language != null) {
@@ -183,7 +185,7 @@ class PlayerViewModel(
     // int with no colon of its own) is compared. Re-run on EVENT_TRACKS_CHANGED since tracks
     // aren't known right after prepare().
     private fun applyDesiredSubtitleTrack() {
-        val target = desiredSubtitleIndex
+        val target = item.desiredSubtitleIndex
         val textGroup = target?.let { idx ->
             player.currentTracks.groups.firstOrNull { group ->
                 group.type == C.TRACK_TYPE_TEXT &&
@@ -228,21 +230,20 @@ class PlayerViewModel(
     // Always fetches detail, even with a streamUrl already given, since title and subtitle tracks only come from here
     private fun loadAndPrepare() {
         viewModelScope.launch {
-            val detail = repository.getDetail(id).getOrNull()
+            val detail = repository.getDetail(item.id).getOrNull()
             val preferredLanguage = subtitlePreferenceStore.current()
             // The user may have left while these loaded
             if (isExiting) return@launch
-            val loaded = playbackSource(detail, streamUrl)
+            val loaded = playbackSource(detail, item.routeStreamUrl)
             if (loaded == null) {
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
-            source = loaded
             val initialTrack = initialSubtitle(loaded.subtitleTracks, preferredLanguage)
-            desiredSubtitleIndex = initialTrack?.index
-            startPlayback(loaded, positionMs)
+            item = item.copy(source = loaded, desiredSubtitleIndex = initialTrack?.index)
+            startPlayback(loaded, item.startPositionMs)
             applyDesiredSubtitleTrack()
-            emitReady(loaded, positionMs = positionMs, selectedIndex = initialTrack?.index)
+            emitReady(loaded, positionMs = item.startPositionMs, selectedIndex = initialTrack?.index)
         }
     }
 
@@ -273,12 +274,12 @@ class PlayerViewModel(
     // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
     // sees Ktor's Auth plugin, so a 401 here needs its own refresh-and-retry, once.
     private fun handlePlayerError() {
-        val current = source
-        if (hasRetriedAfterAuthError || current == null || !isUnauthorized(player.playerError)) {
+        val current = item.source
+        if (item.hasRetriedAfterAuthError || current == null || !isUnauthorized(player.playerError)) {
             _state.update { PlayerUiState.Error }
             return
         }
-        hasRetriedAfterAuthError = true
+        item = item.copy(hasRetriedAfterAuthError = true)
         val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
         cancelPendingSeek()
         viewModelScope.launch {
@@ -348,7 +349,7 @@ class PlayerViewModel(
     }
 
     private suspend fun reportProgressSuspend(played: Boolean, positionMs: Long = player.currentPosition) {
-        val jfId = (source?.streamUrl ?: streamUrl)?.substringAfterLast("/") ?: return
+        val jfId = (item.source?.streamUrl ?: item.routeStreamUrl)?.substringAfterLast("/") ?: return
         playbackRepository.reportProgress(jfId, positionMs, played)
     }
 
@@ -363,9 +364,12 @@ class PlayerViewModel(
         private const val CONTROLS_HIDE_DELAY_MS = 3_000L
         private const val SEEK_COMMIT_DELAY_MS = 700L
         private const val SEEK_END_MARGIN_MS = 10_000L
+        private const val KEY_ID = "id"
+        private const val KEY_STREAM_URL = "streamUrl"
+        private const val KEY_POSITION_MS = "positionMs"
 
         @androidx.annotation.OptIn(UnstableApi::class)
-        fun factory(id: String, streamUrl: String? = null, positionMs: Long = 0L): ViewModelProvider.Factory =
+        val Factory: ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
                     val app = this[APPLICATION_KEY] as StoganetApp
@@ -382,7 +386,7 @@ class PlayerViewModel(
                     val mediaSession = MediaSession.Builder(app, player).build()
                     val refreshHttpClient = app.services.refreshHttpClient
                     PlayerViewModel(
-                        id = id,
+                        savedStateHandle = createSavedStateHandle(),
                         repository = app.services.detailRepository,
                         playbackRepository = app.services.playbackRepository,
                         subtitlePreferenceStore = app.services.subtitlePreferenceStore,
@@ -393,13 +397,20 @@ class PlayerViewModel(
                             refreshToken != null &&
                                 performTokenRefresh(refreshHttpClient, tokenStore, BASE_URL, refreshToken) != null
                         },
-                        streamUrl = streamUrl,
-                        positionMs = positionMs,
                     )
                 }
             }
     }
 }
+
+private data class NowPlaying(
+    val id: String,
+    val routeStreamUrl: String?,
+    val startPositionMs: Long,
+    val source: PlaybackSource? = null,
+    val desiredSubtitleIndex: Int? = null,
+    val hasRetriedAfterAuthError: Boolean = false,
+)
 
 // ExoPlayer wraps the HTTP error in one or more causes, and the cap stops a cause chain that loops back on itself
 private fun isUnauthorized(error: Throwable?): Boolean = generateSequence(error) { it.cause }

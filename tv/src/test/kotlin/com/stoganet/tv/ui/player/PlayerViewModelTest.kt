@@ -1,6 +1,7 @@
 package com.stoganet.tv.ui.player
 
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.C
 import androidx.media3.common.FlagSet
 import androidx.media3.common.Format
@@ -148,18 +149,17 @@ class PlayerViewModelTest {
     }
 
     private fun newVm(streamUrl: String? = "https://api.stoganet.com/stream/abc123") = PlayerViewModel(
-        id = "id1",
+        savedStateHandle = SavedStateHandle(mapOf("id" to "id1", "streamUrl" to streamUrl)),
         repository = repository,
         playbackRepository = playbackRepository,
         subtitlePreferenceStore = subtitlePreferenceStore,
         player = player,
         mediaSession = mediaSession,
         refreshTokens = refreshTokens,
-        streamUrl = streamUrl,
     )
 
-    private fun newVmFromDetail() = PlayerViewModel(
-        id = "id1",
+    private fun newVmFromDetail(positionMs: Long? = null) = PlayerViewModel(
+        savedStateHandle = SavedStateHandle(mapOf("id" to "id1", "positionMs" to positionMs)),
         repository = repository,
         playbackRepository = playbackRepository,
         subtitlePreferenceStore = subtitlePreferenceStore,
@@ -184,6 +184,15 @@ class PlayerViewModelTest {
     }
 
     private fun unauthorizedException(): ExoPlaybackException = httpErrorException(401)
+
+    @Test
+    fun `starts at the position from the route`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        newVmFromDetail(positionMs = 42_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { player.setMediaItem(any<MediaItem>(), 42_000L) }
+    }
 
     @Test
     fun `transitions to Ready when play info available`() = runTest(testDispatcher) {
