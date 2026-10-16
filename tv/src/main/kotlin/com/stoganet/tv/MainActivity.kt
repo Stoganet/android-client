@@ -3,37 +3,40 @@ package com.stoganet.tv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
-import com.stoganet.core.data.auth.TokenStore
 import com.stoganet.tv.ui.AppNavHost
 import com.stoganet.tv.ui.AuthNavHost
 import com.stoganet.tv.ui.theme.StoganetTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: MainActivityViewModel by viewModels { MainActivityViewModel.Factory }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        val services = (application as StoganetApp).services
         setContent {
-            App(services.tokenStore)
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            App(state)
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun App(tokenStore: TokenStore, modifier: Modifier = Modifier) {
-    val isAuthenticated by tokenStore.isAuthenticated.collectAsStateWithLifecycle(false)
+fun App(state: MainActivityUiState, modifier: Modifier = Modifier) {
     StoganetTheme {
         Surface(modifier = modifier.fillMaxSize()) {
-            if (isAuthenticated) AppNavHost() else AuthNavHost()
+            when (state) {
+                MainActivityUiState.SignedIn -> AppNavHost()
+                MainActivityUiState.Loading, MainActivityUiState.SignedOut -> AuthNavHost()
+            }
         }
     }
 }
