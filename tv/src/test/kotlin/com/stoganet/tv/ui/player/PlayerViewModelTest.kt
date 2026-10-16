@@ -404,6 +404,28 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `onIntent Exit while loading keeps the saved position`() = runTest(testDispatcher) {
+        val vm = newVm()
+
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), any()) }
+    }
+
+    @Test
+    fun `detail arriving after exit does not start playback`() = runTest(testDispatcher) {
+        val vm = newVm()
+
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        verify(exactly = 0) { player.play() }
+        assertTrue(vm.state.value is PlayerUiState.Loading)
+    }
+
+    @Test
     fun `onIntent Exit releases the media session`() = runTest(testDispatcher) {
         val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -431,7 +453,7 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun `401 retry drops a pending seek`() = runTest(testDispatcher) {
+    fun `401 retry resumes at a pending seek target`() = runTest(testDispatcher) {
         val listenerSlot = slot<Player.Listener>()
         every { player.addListener(capture(listenerSlot)) } just Runs
         every { player.currentPosition } returns 5_000L
@@ -446,6 +468,7 @@ class PlayerViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         verify(exactly = 0) { player.seekTo(any()) }
+        verify { player.setMediaItem(any<MediaItem>(), 15_000L) }
         assertNull((vm.state.value as PlayerUiState.Ready).seekPreviewMs)
     }
 

@@ -201,15 +201,18 @@ class PlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
-    // A seek still waiting to commit is where the user meant to be, so report that instead
+    // A pending seek is where the user meant to be, and before playback starts there is no position worth saving
     private fun exit() {
         isExiting = true
         stopTick()
         stopUiTick()
-        val positionMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
+        val ready = _state.value as? PlayerUiState.Ready
+        val positionMs = ready?.seekPreviewMs ?: player.currentPosition
         cancelPendingSeek()
-        viewModelScope.launch {
-            withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
+        if (ready != null) {
+            viewModelScope.launch {
+                withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
+            }
         }
         player.stop()
         // Next episode builds its player before this ViewModel is cleared, and two live sessions can't share an id
@@ -225,13 +228,17 @@ class PlayerViewModel(
     // Always fetches detail, even with a streamUrl already given, since title and subtitle tracks only come from here
     private fun loadAndPrepare() {
         viewModelScope.launch {
-            val loaded = playbackSource(repository.getDetail(id).getOrNull(), streamUrl)
+            val detail = repository.getDetail(id).getOrNull()
+            val preferredLanguage = subtitlePreferenceStore.current()
+            // The user may have left while these loaded
+            if (isExiting) return@launch
+            val loaded = playbackSource(detail, streamUrl)
             if (loaded == null) {
                 _state.update { PlayerUiState.Error }
                 return@launch
             }
             source = loaded
-            val initialTrack = initialSubtitle(loaded.subtitleTracks, subtitlePreferenceStore.current())
+            val initialTrack = initialSubtitle(loaded.subtitleTracks, preferredLanguage)
             desiredSubtitleIndex = initialTrack?.index
             startPlayback(loaded, positionMs)
             applyDesiredSubtitleTrack()
@@ -272,8 +279,8 @@ class PlayerViewModel(
             return
         }
         hasRetriedAfterAuthError = true
+        val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
         cancelPendingSeek()
-        val resumeMs = player.currentPosition
         viewModelScope.launch {
             if (!refreshTokens()) {
                 _state.update { PlayerUiState.Error }

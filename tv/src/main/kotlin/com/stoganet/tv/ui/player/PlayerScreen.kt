@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
@@ -50,12 +52,17 @@ fun PlayerScreen(
     onIntent: (PlayerIntent) -> Unit = {},
     onNextEpisode: (NextEpisodeUi) -> Unit = {},
 ) {
+    // The old player stays on screen while the next one fades in, so presses after leaving are dropped
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val leave = { if (lifecycle.isResumed()) onBack() }
+    val openNextEpisode: (NextEpisodeUi) -> Unit = { if (lifecycle.isResumed()) onNextEpisode(it) }
+
     BackHandler(
         onBack = {
             if (state is PlayerUiState.Ready && state.subtitleMenuOpen) {
                 onIntent(PlayerIntent.CloseSubtitleMenu)
             } else {
-                onBack()
+                leave()
             }
         },
     )
@@ -79,7 +86,7 @@ fun PlayerScreen(
                     )
                     Spacer(Modifier.height(24.dp))
                     Button(
-                        onClick = onBack,
+                        onClick = leave,
                         modifier = Modifier.semantics { contentDescription = backLabel },
                     ) { Text(backLabel) }
                 }
@@ -90,11 +97,13 @@ fun PlayerScreen(
             state = state,
             player = player,
             onIntent = onIntent,
-            onNextEpisode = onNextEpisode,
+            onNextEpisode = openNextEpisode,
             modifier = modifier,
         )
     }
 }
+
+private fun Lifecycle.isResumed() = currentState.isAtLeast(Lifecycle.State.RESUMED)
 
 @Composable
 private fun ReadyPlayerContent(
