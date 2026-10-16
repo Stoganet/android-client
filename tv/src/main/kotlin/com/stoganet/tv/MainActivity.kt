@@ -20,8 +20,9 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainActivityViewModel by viewModels { MainActivityViewModel.Factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashScreen.setKeepOnScreenCondition { viewModel.state.value == MainActivityUiState.Loading }
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             App(state)
@@ -34,8 +35,9 @@ fun App(state: MainActivityUiState, modifier: Modifier = Modifier) {
     StoganetTheme {
         Surface(modifier = modifier.fillMaxSize()) {
             when (state) {
+                MainActivityUiState.Loading -> Unit
                 MainActivityUiState.SignedIn -> AppNavHost()
-                MainActivityUiState.Loading, MainActivityUiState.SignedOut -> AuthNavHost()
+                MainActivityUiState.SignedOut -> AuthNavHost()
             }
         }
     }
