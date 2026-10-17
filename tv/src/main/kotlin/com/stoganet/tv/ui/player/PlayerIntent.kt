@@ -2,6 +2,7 @@ package com.stoganet.tv.ui.player
 
 sealed interface PlayerIntent {
     data object Exit : PlayerIntent
+    data object PlayNext : PlayerIntent
     data object TogglePlayPause : PlayerIntent
     data class SeekBackward(val repeatCount: Int = 0) : PlayerIntent
     data class SeekForward(val repeatCount: Int = 0) : PlayerIntent

@@ -26,6 +26,7 @@ import com.stoganet.core.api.model.NextEpisode
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
+import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.core.data.player.SubtitlePreferenceStore
@@ -158,8 +159,11 @@ class PlayerViewModelTest {
         refreshTokens = refreshTokens,
     )
 
-    private fun newVmFromDetail(positionMs: Long? = null) = PlayerViewModel(
-        savedStateHandle = SavedStateHandle(mapOf("id" to "id1", "positionMs" to positionMs)),
+    private fun newVmFromDetail(
+        positionMs: Long? = null,
+        savedStateHandle: SavedStateHandle = SavedStateHandle(mapOf("id" to "id1", "positionMs" to positionMs)),
+    ) = PlayerViewModel(
+        savedStateHandle = savedStateHandle,
         repository = repository,
         playbackRepository = playbackRepository,
         subtitlePreferenceStore = subtitlePreferenceStore,
@@ -184,6 +188,24 @@ class PlayerViewModelTest {
     }
 
     private fun unauthorizedException(): ExoPlaybackException = httpErrorException(401)
+
+    private fun stubEpisodeWithNext(nextProgress: WatchProgress? = null) {
+        val next = NextEpisode(
+            id = "jf:ep4",
+            seasonNumber = 1,
+            number = 4,
+            title = "Next Title",
+            progress = nextProgress,
+        )
+        coEvery { repository.getDetail("id1") } returns
+            Result.success(fakeDetail(episode = fakeEpisodeInfo().copy(next = next)))
+        coEvery { repository.getDetail("jf:ep4") } returns Result.success(
+            fakeDetail(
+                play = fakePlay().copy(streamUrl = "https://api.stoganet.com/stream/ep4"),
+                episode = fakeEpisodeInfo().copy(number = 4),
+            ).copy(title = "Next Title"),
+        )
+    }
 
     @Test
     fun `starts at the position from the route`() = runTest(testDispatcher) {
@@ -399,6 +421,79 @@ class PlayerViewModelTest {
         val ready = vm.state.value as PlayerUiState.Ready
         assertEquals("Test Episode", ready.title)
         assertEquals(EpisodeLineUi(seriesTitle = "Test Show", seasonNumber = 1, number = 3), ready.episodeLine)
+    }
+
+    @Test
+    fun `PlayNext plays the next episode on the same player`() = runTest(testDispatcher) {
+        stubEpisodeWithNext(nextProgress = WatchProgress(positionMs = 120_000L, played = false))
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify {
+            player.setMediaItem(
+                match<MediaItem> { it.localConfiguration?.uri.toString().endsWith("/ep4") },
+                120_000L,
+            )
+        }
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Next Title", ready.title)
+        assertEquals(4, ready.episodeLine?.number)
+    }
+
+    @Test
+    fun `PlayNext reports progress for the episode being left`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        every { player.currentPosition } returns 30_000L
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 30_000L, false) }
+        coVerify(exactly = 0) { playbackRepository.reportProgress("ep4", 30_000L, any()) }
+    }
+
+    @Test
+    fun `PlayNext saves the next episode as the start to restore`() = runTest(testDispatcher) {
+        stubEpisodeWithNext(nextProgress = WatchProgress(positionMs = 120_000L, played = false))
+        val handle = SavedStateHandle(mapOf("id" to "id1", "streamUrl" to "https://api.stoganet.com/stream/abc123"))
+        val vm = newVmFromDetail(savedStateHandle = handle)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+
+        assertEquals("jf:ep4", handle.get<String>("id"))
+        assertNull(handle.get<String>("streamUrl"))
+        assertEquals(120_000L, handle.get<Long>("positionMs"))
+    }
+
+    @Test
+    fun `PlayNext without a next episode does nothing`() = runTest(testDispatcher) {
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        coVerify(exactly = 0) { repository.getDetail("jf:ep4") }
+    }
+
+    @Test
+    fun `PlayNext after leaving does nothing`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.Exit)
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.getDetail("jf:ep4") }
     }
 
     @Test

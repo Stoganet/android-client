@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerViewModel(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     private val repository: DetailRepository,
     private val playbackRepository: PlaybackRepository,
     private val subtitlePreferenceStore: SubtitlePreferenceStore,
@@ -84,11 +84,9 @@ class PlayerViewModel(
                 }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     if (isPlaying) {
-                        startTick()
-                        startUiTick()
+                        startTicks()
                     } else {
-                        stopTick()
-                        stopUiTick()
+                        stopTicks()
                         updatePlaybackPosition()
                         if (!isExiting) reportProgress(played = false)
                     }
@@ -105,6 +103,7 @@ class PlayerViewModel(
     fun onIntent(intent: PlayerIntent) {
         when (intent) {
             PlayerIntent.Exit -> exit()
+            PlayerIntent.PlayNext -> playNext()
             PlayerIntent.TogglePlayPause -> togglePlayPause()
             is PlayerIntent.SeekBackward -> seekBy(direction = -1, repeatCount = intent.repeatCount)
             is PlayerIntent.SeekForward -> seekBy(direction = 1, repeatCount = intent.repeatCount)
@@ -203,22 +202,42 @@ class PlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
-    // A pending seek is where the user meant to be, and before playback starts there is no position worth saving
     private fun exit() {
         isExiting = true
-        stopTick()
-        stopUiTick()
+        stopTicks()
+        reportLeavingProgress()
+        player.stop()
+        // A new player screen can be built before this ViewModel is cleared, and two live sessions can't share an id
+        mediaSession.release()
+    }
+
+    private fun playNext() {
+        val next = item.source?.nextEpisode ?: return
+        if (isExiting) return
+        stopTicks()
+        reportLeavingProgress()
+        player.stop()
+        item = NowPlaying(id = next.id, routeStreamUrl = null, startPositionMs = next.positionMs)
+        savedStateHandle[KEY_ID] = item.id
+        savedStateHandle[KEY_STREAM_URL] = null
+        savedStateHandle[KEY_POSITION_MS] = item.startPositionMs
+        _state.update { PlayerUiState.Loading }
+        loadAndPrepare()
+    }
+
+    // A pending seek is where the user meant to be, and before playback starts there is no position worth saving
+    private fun reportLeavingProgress() {
         val ready = _state.value as? PlayerUiState.Ready
         val positionMs = ready?.seekPreviewMs ?: player.currentPosition
+        val source = item.source
         cancelPendingSeek()
         if (ready != null) {
             viewModelScope.launch {
-                withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
+                withContext(NonCancellable) {
+                    reportProgressSuspend(played = false, positionMs = positionMs, source = source)
+                }
             }
         }
-        player.stop()
-        // Next episode builds its player before this ViewModel is cleared, and two live sessions can't share an id
-        mediaSession.release()
     }
 
     private fun cancelPendingSeek() {
@@ -296,21 +315,13 @@ class PlayerViewModel(
         }
     }
 
-    private fun startTick() {
+    private fun startTicks() {
         tickJob = viewModelScope.launch {
             while (isActive) {
                 delay(PROGRESS_REPORT_INTERVAL_MS.milliseconds)
                 reportProgressSuspend(played = false)
             }
         }
-    }
-
-    private fun stopTick() {
-        tickJob?.cancel()
-        tickJob = null
-    }
-
-    private fun startUiTick() {
         uiTickJob = viewModelScope.launch {
             while (isActive) {
                 updatePlaybackPosition()
@@ -319,7 +330,9 @@ class PlayerViewModel(
         }
     }
 
-    private fun stopUiTick() {
+    private fun stopTicks() {
+        tickJob?.cancel()
+        tickJob = null
         uiTickJob?.cancel()
         uiTickJob = null
     }
@@ -348,8 +361,13 @@ class PlayerViewModel(
         viewModelScope.launch { reportProgressSuspend(played) }
     }
 
-    private suspend fun reportProgressSuspend(played: Boolean, positionMs: Long = player.currentPosition) {
-        val jfId = (item.source?.streamUrl ?: item.routeStreamUrl)?.substringAfterLast("/") ?: return
+    // Late events from a replaced episode would otherwise report under the next one's id
+    private suspend fun reportProgressSuspend(
+        played: Boolean,
+        positionMs: Long = player.currentPosition,
+        source: PlaybackSource? = item.source,
+    ) {
+        val jfId = source?.streamUrl?.substringAfterLast("/") ?: return
         playbackRepository.reportProgress(jfId, positionMs, played)
     }
 
