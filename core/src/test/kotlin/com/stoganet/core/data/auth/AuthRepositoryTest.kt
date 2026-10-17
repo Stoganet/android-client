@@ -6,8 +6,10 @@ import com.stoganet.core.api.model.User
 import com.stoganet.core.data.net.StoganetApi
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -25,6 +27,18 @@ class AuthRepositoryTest {
     fun setUp() {
         tokenStore = TokenStore(FakeDataStore())
         repository = AuthRepository(api, tokenStore)
+    }
+
+    @Test
+    fun `isSignedIn is false without tokens`() = runTest {
+        assertFalse(repository.isSignedIn.first())
+    }
+
+    @Test
+    fun `isSignedIn is true after tokens are saved`() = runTest {
+        tokenStore.saveTokens(TokenPair(accessToken = "at", refreshToken = "rt", user = fakeUser))
+
+        assertTrue(repository.isSignedIn.first())
     }
 
     @Test

@@ -24,7 +24,6 @@ data class ResumeUiState(
     val episodeNumber: Int,
     val episodeId: String,
     val title: String,
-    val streamUrl: String,
     val positionMs: Long,
 )
 
@@ -36,7 +35,7 @@ data class EpisodeUiState(
     val overview: String?,
     val runtimeMinutes: Int?,
     val thumbnailUrl: String?,
-    val streamUrl: String?,
+    val isPlayable: Boolean,
     val positionMs: Long,
     val played: Boolean,
 )
@@ -60,7 +59,6 @@ sealed interface DetailUiState {
         val seasons: ImmutableList<SeasonUiState>,
         val resume: ResumeUiState?,
         val start: ResumeUiState? = null,
-        val streamUrl: String?,
         val isPlayable: Boolean,
         val mediaState: MediaState,
         val episodes: ImmutableList<EpisodeUiState> = persistentListOf(),

@@ -146,8 +146,8 @@ fun AppNavHost() {
             DetailScreen(
                 state = state,
                 onIntent = vm::onIntent,
-                onNavigateToPlayer = { playId, streamUrl, positionMs ->
-                    navController.navigate(AppRoutes.player(playId, streamUrl, positionMs))
+                onNavigateToPlayer = { playId, positionMs ->
+                    navController.navigate(AppRoutes.player(playId, positionMs))
                 },
             )
         }
@@ -155,21 +155,13 @@ fun AppNavHost() {
             route = AppRoutes.PLAYER,
             arguments = listOf(
                 navArgument("id") { type = NavType.StringType },
-                navArgument("streamUrl") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
                 navArgument("positionMs") {
                     type = NavType.LongType
                     defaultValue = 0L
                 },
             ),
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getString("id") ?: return@composable
-            val streamUrl = backStackEntry.arguments?.getString("streamUrl")
-            val positionMs = backStackEntry.arguments?.getLong("positionMs") ?: 0L
-            val vm: PlayerViewModel = viewModel(factory = PlayerViewModel.factory(id, streamUrl, positionMs))
+        ) {
+            val vm: PlayerViewModel = viewModel(factory = PlayerViewModel.Factory)
             val state by vm.state.collectAsStateWithLifecycle()
             PlayerScreen(
                 state = state,
@@ -179,12 +171,6 @@ fun AppNavHost() {
                 },
                 player = vm.player,
                 onIntent = vm::onIntent,
-                onNextEpisode = { next ->
-                    vm.onIntent(PlayerIntent.Exit)
-                    navController.navigate(AppRoutes.player(next.id, positionMs = next.positionMs)) {
-                        popUpTo(AppRoutes.PLAYER) { inclusive = true }
-                    }
-                },
             )
         }
     }

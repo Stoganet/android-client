@@ -1,8 +1,10 @@
 package com.stoganet.tv.ui.player
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -24,14 +26,20 @@ import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.core.data.player.SubtitlePreferenceStore
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -39,70 +47,40 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerViewModel(
-    private val id: String,
+    private val savedStateHandle: SavedStateHandle,
     private val repository: DetailRepository,
     private val playbackRepository: PlaybackRepository,
     private val subtitlePreferenceStore: SubtitlePreferenceStore,
     val player: ExoPlayer,
     private val mediaSession: MediaSession,
     private val refreshTokens: suspend () -> Boolean,
-    private val streamUrl: String? = null,
-    private val positionMs: Long = 0L,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
-    private var source: PlaybackSource? = null
-    private var desiredSubtitleIndex: Int? = null
-    private var tickJob: Job? = null
-    private var uiTickJob: Job? = null
-    private var hideControlsJob: Job? = null
-    private var seekCommitJob: Job? = null
-    private var isExiting = false
-    private var hasRetriedAfterAuthError = false
+    private val nowPlaying = MutableStateFlow(
+        NowPlaying(
+            id = checkNotNull(savedStateHandle[KEY_ID]),
+            startPositionMs = savedStateHandle[KEY_POSITION_MS] ?: 0L,
+        ),
+    )
+    private val interactions = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = DROP_OLDEST)
+    private val playback: Job = viewModelScope.launch { nowPlaying.collectLatest { play(it) } }
 
     init {
         viewModelScope.launch {
-            player.listenTo(
-                Player.EVENT_IS_PLAYING_CHANGED,
-                Player.EVENT_PLAYBACK_STATE_CHANGED,
-                Player.EVENT_PLAYER_ERROR,
-                Player.EVENT_TRACKS_CHANGED,
-                Player.EVENT_TIMELINE_CHANGED,
-            ) { events ->
-                if (events.contains(Player.EVENT_PLAYER_ERROR)) {
-                    handlePlayerError()
-                }
-                if (events.contains(Player.EVENT_TRACKS_CHANGED)) {
-                    applyDesiredSubtitleTrack()
-                }
-                if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
-                    updatePlaybackPosition()
-                }
-                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
-                    if (isPlaying) {
-                        startTick()
-                        startUiTick()
-                    } else {
-                        stopTick()
-                        stopUiTick()
-                        updatePlaybackPosition()
-                        if (!isExiting) reportProgress(played = false)
-                    }
-                }
-                if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
-                    updateBuffering()
-                    if (playbackState == Player.STATE_ENDED) reportProgress(played = true)
-                }
+            interactions.collectLatest {
+                delay(CONTROLS_HIDE_DELAY_MS.milliseconds)
+                updateReady { if (subtitleMenuOpen) this else copy(controlsVisible = false) }
             }
         }
-        loadAndPrepare()
     }
 
     fun onIntent(intent: PlayerIntent) {
         when (intent) {
             PlayerIntent.Exit -> exit()
+            PlayerIntent.PlayNext -> playNext()
             PlayerIntent.TogglePlayPause -> togglePlayPause()
             is PlayerIntent.SeekBackward -> seekBy(direction = -1, repeatCount = intent.repeatCount)
             is PlayerIntent.SeekForward -> seekBy(direction = 1, repeatCount = intent.repeatCount)
@@ -113,33 +91,152 @@ class PlayerViewModel(
         }
     }
 
+    private suspend fun play(item: NowPlaying) {
+        _state.update { PlayerUiState.Loading }
+        val detail = repository.getDetail(item.id).getOrNull()
+        val preferredLanguage = subtitlePreferenceStore.current()
+        val source = playbackSource(detail)
+        if (source == null) {
+            _state.update { PlayerUiState.Error }
+            return
+        }
+        try {
+            coroutineScope {
+                launch(start = CoroutineStart.UNDISPATCHED) { listenToPlayer(source) }
+                launch { commitSeeks() }
+                startPlayback(source, item.startPositionMs)
+                val initialTrack = initialSubtitle(source.subtitleTracks, preferredLanguage)
+                emitReady(source, positionMs = item.startPositionMs, selectedIndex = initialTrack?.index)
+                applySelectedSubtitleTrack()
+            }
+        } finally {
+            leave(source)
+        }
+    }
+
+    private suspend fun listenToPlayer(source: PlaybackSource): Nothing = coroutineScope {
+        var hasRetriedAfterAuthError = false
+        val playing = MutableStateFlow(false)
+        launch {
+            playing.collectLatest { isPlaying ->
+                while (isPlaying) {
+                    delay(PROGRESS_REPORT_INTERVAL_MS.milliseconds)
+                    reportProgress(source, played = false)
+                }
+            }
+        }
+        launch {
+            playing.collectLatest { isPlaying ->
+                while (isPlaying) {
+                    updatePlaybackPosition()
+                    delay(UI_TICK_INTERVAL_MS.milliseconds)
+                }
+            }
+        }
+        player.listenTo(
+            Player.EVENT_IS_PLAYING_CHANGED,
+            Player.EVENT_PLAYBACK_STATE_CHANGED,
+            Player.EVENT_PLAYER_ERROR,
+            Player.EVENT_TRACKS_CHANGED,
+            Player.EVENT_TIMELINE_CHANGED,
+        ) { events ->
+            if (events.contains(Player.EVENT_PLAYER_ERROR)) {
+                if (hasRetriedAfterAuthError || !isUnauthorized(playerError)) {
+                    _state.update { PlayerUiState.Error }
+                } else {
+                    hasRetriedAfterAuthError = true
+                    val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: currentPosition
+                    cancelPendingSeek()
+                    launch { retryAfterRefresh(source, resumeMs) }
+                }
+            }
+            if (events.contains(Player.EVENT_TRACKS_CHANGED)) {
+                applySelectedSubtitleTrack()
+            }
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                updatePlaybackPosition()
+            }
+            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                playing.value = isPlaying
+                if (!isPlaying) {
+                    updatePlaybackPosition()
+                    val ended = playbackState == Player.STATE_ENDED
+                    launch { reportProgress(source, played = ended) }
+                }
+            }
+            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                updateBuffering()
+                if (playbackState == Player.STATE_ENDED) launch { reportProgress(source, played = true) }
+            }
+        }
+    }
+
+    // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
+    // sees Ktor's Auth plugin, so a 401 here needs its own refresh-and-retry once
+    private suspend fun retryAfterRefresh(source: PlaybackSource, resumeMs: Long) {
+        if (!refreshTokens()) {
+            _state.update { PlayerUiState.Error }
+            return
+        }
+        startPlayback(source, resumeMs)
+        val ready = _state.value as? PlayerUiState.Ready
+        emitReady(source, positionMs = resumeMs, selectedIndex = ready?.selectedSubtitleIndex)
+        applySelectedSubtitleTrack()
+    }
+
+    // Seeks once input pauses so held keys don't send a stream request per repeat
+    private suspend fun commitSeeks() {
+        _state.map { (it as? PlayerUiState.Ready)?.seekPreviewMs }
+            .distinctUntilChanged()
+            .collectLatest { target ->
+                if (target == null) return@collectLatest
+                delay(SEEK_COMMIT_DELAY_MS.milliseconds)
+                player.seekTo(target)
+                updateReady { copy(seekPreviewMs = null) }
+                updatePlaybackPosition()
+            }
+    }
+
+    private fun leave(source: PlaybackSource) {
+        val positionMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
+        val ended = player.playbackState == Player.STATE_ENDED
+        player.stop()
+        viewModelScope.launch {
+            withContext(NonCancellable) { reportProgress(source, played = ended, positionMs = positionMs) }
+        }
+    }
+
+    private fun exit() {
+        playback.cancel()
+        mediaSession.release()
+    }
+
+    private fun playNext() {
+        val next = (_state.value as? PlayerUiState.Ready)?.nextEpisode ?: return
+        if (!playback.isActive) return
+        savedStateHandle[KEY_ID] = next.id
+        savedStateHandle[KEY_POSITION_MS] = next.positionMs
+        nowPlaying.value = NowPlaying(id = next.id, startPositionMs = next.positionMs)
+    }
+
     private fun togglePlayPause() {
         if (player.isPlaying) player.pause() else player.play()
         updatePlaybackPosition()
         showControls()
     }
 
-    // Seeks once input pauses so held keys don't send a stream request per repeat
     private fun seekBy(direction: Int, repeatCount: Int) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
         val start = ready.seekPreviewMs ?: player.currentPosition
         // Forward stops short of the end so overshooting doesn't finish the video, and waits for a known length
         val endLimitMs = player.duration.takeIf { it > 0 }?.let { it - SEEK_END_MARGIN_MS } ?: start
         val target = (start + direction * seekStepMs(repeatCount)).coerceIn(0, maxOf(endLimitMs, start))
-        if (target == start) {
-            showControls()
-            return
-        }
-        updateReady { copy(seekPreviewMs = target) }
+        if (target != start) updateReady { copy(seekPreviewMs = target) }
         showControls()
+    }
 
-        seekCommitJob?.cancel()
-        seekCommitJob = viewModelScope.launch {
-            delay(SEEK_COMMIT_DELAY_MS.milliseconds)
-            player.seekTo(target)
-            updateReady { copy(seekPreviewMs = null) }
-            updatePlaybackPosition()
-        }
+    private fun cancelPendingSeek() {
+        updateReady { copy(seekPreviewMs = null) }
     }
 
     private fun showControls() {
@@ -148,15 +245,10 @@ class PlayerViewModel(
     }
 
     private fun scheduleHideControls() {
-        hideControlsJob?.cancel()
-        hideControlsJob = viewModelScope.launch {
-            delay(CONTROLS_HIDE_DELAY_MS.milliseconds)
-            updateReady { if (subtitleMenuOpen) this else copy(controlsVisible = false) }
-        }
+        interactions.tryEmit(Unit)
     }
 
     private fun openSubtitleMenu() {
-        hideControlsJob?.cancel()
         updateReady { copy(subtitleMenuOpen = true, controlsVisible = true) }
     }
 
@@ -167,13 +259,12 @@ class PlayerViewModel(
 
     private fun selectSubtitleTrack(index: Int?) {
         val ready = _state.value as? PlayerUiState.Ready ?: return
-        desiredSubtitleIndex = index
-        applyDesiredSubtitleTrack()
+        updateReady { copy(selectedSubtitleIndex = index, subtitleMenuOpen = false) }
+        applySelectedSubtitleTrack()
         val language = ready.subtitleTracks.firstOrNull { it.index == index }?.language
         if (language != null) {
             viewModelScope.launch { subtitlePreferenceStore.savePreferredLanguage(language) }
         }
-        updateReady { copy(selectedSubtitleIndex = index, subtitleMenuOpen = false) }
         scheduleHideControls()
     }
 
@@ -182,8 +273,8 @@ class PlayerViewModel(
     // only the suffix (the id we set via .setId() in toMediaItem, always a plain track.index
     // int with no colon of its own) is compared. Re-run on EVENT_TRACKS_CHANGED since tracks
     // aren't known right after prepare().
-    private fun applyDesiredSubtitleTrack() {
-        val target = desiredSubtitleIndex
+    private fun applySelectedSubtitleTrack() {
+        val target = (_state.value as? PlayerUiState.Ready)?.selectedSubtitleIndex
         val textGroup = target?.let { idx ->
             player.currentTracks.groups.firstOrNull { group ->
                 group.type == C.TRACK_TYPE_TEXT &&
@@ -199,51 +290,6 @@ class PlayerViewModel(
             builder.addOverride(TrackSelectionOverride(textGroup.mediaTrackGroup, 0))
         }
         player.trackSelectionParameters = builder.build()
-    }
-
-    // A pending seek is where the user meant to be, and before playback starts there is no position worth saving
-    private fun exit() {
-        isExiting = true
-        stopTick()
-        stopUiTick()
-        val ready = _state.value as? PlayerUiState.Ready
-        val positionMs = ready?.seekPreviewMs ?: player.currentPosition
-        cancelPendingSeek()
-        if (ready != null) {
-            viewModelScope.launch {
-                withContext(NonCancellable) { reportProgressSuspend(played = false, positionMs = positionMs) }
-            }
-        }
-        player.stop()
-        // Next episode builds its player before this ViewModel is cleared, and two live sessions can't share an id
-        mediaSession.release()
-    }
-
-    private fun cancelPendingSeek() {
-        seekCommitJob?.cancel()
-        seekCommitJob = null
-        updateReady { copy(seekPreviewMs = null) }
-    }
-
-    // Always fetches detail, even with a streamUrl already given, since title and subtitle tracks only come from here
-    private fun loadAndPrepare() {
-        viewModelScope.launch {
-            val detail = repository.getDetail(id).getOrNull()
-            val preferredLanguage = subtitlePreferenceStore.current()
-            // The user may have left while these loaded
-            if (isExiting) return@launch
-            val loaded = playbackSource(detail, streamUrl)
-            if (loaded == null) {
-                _state.update { PlayerUiState.Error }
-                return@launch
-            }
-            source = loaded
-            val initialTrack = initialSubtitle(loaded.subtitleTracks, preferredLanguage)
-            desiredSubtitleIndex = initialTrack?.index
-            startPlayback(loaded, positionMs)
-            applyDesiredSubtitleTrack()
-            emitReady(loaded, positionMs = positionMs, selectedIndex = initialTrack?.index)
-        }
     }
 
     private fun startPlayback(source: PlaybackSource, positionMs: Long) {
@@ -270,59 +316,6 @@ class PlayerViewModel(
         scheduleHideControls()
     }
 
-    // ExoPlayer's HTTP data source has a static bearer header set at creation time and never
-    // sees Ktor's Auth plugin, so a 401 here needs its own refresh-and-retry, once.
-    private fun handlePlayerError() {
-        val current = source
-        if (hasRetriedAfterAuthError || current == null || !isUnauthorized(player.playerError)) {
-            _state.update { PlayerUiState.Error }
-            return
-        }
-        hasRetriedAfterAuthError = true
-        val resumeMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
-        cancelPendingSeek()
-        viewModelScope.launch {
-            val refreshed = refreshTokens()
-            if (isExiting) return@launch
-            if (!refreshed) {
-                _state.update { PlayerUiState.Error }
-                return@launch
-            }
-            startPlayback(current, resumeMs)
-            val ready = _state.value as? PlayerUiState.Ready
-            emitReady(current, positionMs = resumeMs, selectedIndex = ready?.selectedSubtitleIndex)
-            applyDesiredSubtitleTrack()
-        }
-    }
-
-    private fun startTick() {
-        tickJob = viewModelScope.launch {
-            while (isActive) {
-                delay(PROGRESS_REPORT_INTERVAL_MS.milliseconds)
-                reportProgressSuspend(played = false)
-            }
-        }
-    }
-
-    private fun stopTick() {
-        tickJob?.cancel()
-        tickJob = null
-    }
-
-    private fun startUiTick() {
-        uiTickJob = viewModelScope.launch {
-            while (isActive) {
-                updatePlaybackPosition()
-                delay(UI_TICK_INTERVAL_MS.milliseconds)
-            }
-        }
-    }
-
-    private fun stopUiTick() {
-        uiTickJob?.cancel()
-        uiTickJob = null
-    }
-
     private fun updateBuffering() {
         val isBuffering = player.playbackState == Player.STATE_BUFFERING
         updateReady { copy(isBuffering = isBuffering) }
@@ -343,12 +336,12 @@ class PlayerViewModel(
         _state.update { s -> if (s is PlayerUiState.Ready) s.transform() else s }
     }
 
-    private fun reportProgress(played: Boolean) {
-        viewModelScope.launch { reportProgressSuspend(played) }
-    }
-
-    private suspend fun reportProgressSuspend(played: Boolean, positionMs: Long = player.currentPosition) {
-        val jfId = (source?.streamUrl ?: streamUrl)?.substringAfterLast("/") ?: return
+    private suspend fun reportProgress(
+        source: PlaybackSource,
+        played: Boolean,
+        positionMs: Long = player.currentPosition,
+    ) {
+        val jfId = source.streamUrl.substringAfterLast("/")
         playbackRepository.reportProgress(jfId, positionMs, played)
     }
 
@@ -363,9 +356,11 @@ class PlayerViewModel(
         private const val CONTROLS_HIDE_DELAY_MS = 3_000L
         private const val SEEK_COMMIT_DELAY_MS = 700L
         private const val SEEK_END_MARGIN_MS = 10_000L
+        private const val KEY_ID = "id"
+        private const val KEY_POSITION_MS = "positionMs"
 
         @androidx.annotation.OptIn(UnstableApi::class)
-        fun factory(id: String, streamUrl: String? = null, positionMs: Long = 0L): ViewModelProvider.Factory =
+        val Factory: ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
                     val app = this[APPLICATION_KEY] as StoganetApp
@@ -382,7 +377,7 @@ class PlayerViewModel(
                     val mediaSession = MediaSession.Builder(app, player).build()
                     val refreshHttpClient = app.services.refreshHttpClient
                     PlayerViewModel(
-                        id = id,
+                        savedStateHandle = createSavedStateHandle(),
                         repository = app.services.detailRepository,
                         playbackRepository = app.services.playbackRepository,
                         subtitlePreferenceStore = app.services.subtitlePreferenceStore,
@@ -393,13 +388,13 @@ class PlayerViewModel(
                             refreshToken != null &&
                                 performTokenRefresh(refreshHttpClient, tokenStore, BASE_URL, refreshToken) != null
                         },
-                        streamUrl = streamUrl,
-                        positionMs = positionMs,
                     )
                 }
             }
     }
 }
+
+private data class NowPlaying(val id: String, val startPositionMs: Long)
 
 // ExoPlayer wraps the HTTP error in one or more causes, and the cap stops a cause chain that loops back on itself
 private fun isUnauthorized(error: Throwable?): Boolean = generateSequence(error) { it.cause }

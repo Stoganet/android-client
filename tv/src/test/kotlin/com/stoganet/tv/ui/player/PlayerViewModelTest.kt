@@ -1,6 +1,7 @@
 package com.stoganet.tv.ui.player
 
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.C
 import androidx.media3.common.FlagSet
 import androidx.media3.common.Format
@@ -25,6 +26,7 @@ import com.stoganet.core.api.model.NextEpisode
 import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.SeriesRef
 import com.stoganet.core.api.model.SubtitleTrack
+import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.core.data.player.SubtitlePreferenceStore
@@ -87,8 +89,6 @@ class PlayerViewModelTest {
         every { player.currentTracks } returns Tracks.EMPTY
         coEvery { subtitlePreferenceStore.current() } returns null
         coEvery { subtitlePreferenceStore.savePreferredLanguage(any()) } just Runs
-        // loadAndPrepare() always fetches detail; default to a successful fetch with no
-        // subtitle tracks so streamUrl-only tests don't need to stub it explicitly.
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
     }
 
@@ -147,19 +147,11 @@ class PlayerViewModelTest {
         return Tracks(groups)
     }
 
-    private fun newVm(streamUrl: String? = "https://api.stoganet.com/stream/abc123") = PlayerViewModel(
-        id = "id1",
-        repository = repository,
-        playbackRepository = playbackRepository,
-        subtitlePreferenceStore = subtitlePreferenceStore,
-        player = player,
-        mediaSession = mediaSession,
-        refreshTokens = refreshTokens,
-        streamUrl = streamUrl,
-    )
-
-    private fun newVmFromDetail() = PlayerViewModel(
-        id = "id1",
+    private fun newVm(
+        positionMs: Long? = null,
+        savedStateHandle: SavedStateHandle = SavedStateHandle(mapOf("id" to "id1", "positionMs" to positionMs)),
+    ) = PlayerViewModel(
+        savedStateHandle = savedStateHandle,
         repository = repository,
         playbackRepository = playbackRepository,
         subtitlePreferenceStore = subtitlePreferenceStore,
@@ -185,10 +177,42 @@ class PlayerViewModelTest {
 
     private fun unauthorizedException(): ExoPlaybackException = httpErrorException(401)
 
+    private fun Player.Listener.isPlayingChanged(isPlaying: Boolean) {
+        every { player.isPlaying } returns isPlaying
+        onEvents(player, events(Player.EVENT_IS_PLAYING_CHANGED))
+    }
+
+    private fun stubEpisodeWithNext(nextProgress: WatchProgress? = null) {
+        val next = NextEpisode(
+            id = "jf:ep4",
+            seasonNumber = 1,
+            number = 4,
+            title = "Next Title",
+            progress = nextProgress,
+        )
+        coEvery { repository.getDetail("id1") } returns
+            Result.success(fakeDetail(episode = fakeEpisodeInfo().copy(next = next)))
+        coEvery { repository.getDetail("jf:ep4") } returns Result.success(
+            fakeDetail(
+                play = fakePlay().copy(streamUrl = "https://api.stoganet.com/stream/ep4"),
+                episode = fakeEpisodeInfo().copy(number = 4),
+            ).copy(title = "Next Title"),
+        )
+    }
+
+    @Test
+    fun `starts at the position from the route`() = runTest(testDispatcher) {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        newVm(positionMs = 42_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { player.setMediaItem(any<MediaItem>(), 42_000L) }
+    }
+
     @Test
     fun `transitions to Ready when play info available`() = runTest(testDispatcher) {
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(vm.state.value is PlayerUiState.Ready)
@@ -200,7 +224,7 @@ class PlayerViewModelTest {
     @Test
     fun `transitions to Error on fetch failure`() = runTest(testDispatcher) {
         coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("fail"))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(vm.state.value is PlayerUiState.Error)
@@ -209,32 +233,10 @@ class PlayerViewModelTest {
     @Test
     fun `transitions to Error when play is null`() = runTest(testDispatcher) {
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(play = null))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(vm.state.value is PlayerUiState.Error)
-    }
-
-    @Test
-    fun `transitions to Ready with given streamUrl even when detail fetch fails`() = runTest(testDispatcher) {
-        coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("fail"))
-        val vm = newVm()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertTrue(vm.state.value is PlayerUiState.Ready)
-        verify { player.setMediaItem(any<MediaItem>(), any<Long>()) }
-        verify { player.prepare() }
-        coVerify { repository.getDetail(any()) }
-    }
-
-    @Test
-    fun `streamUrl path has no subtitle tracks`() = runTest(testDispatcher) {
-        val vm = newVm()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val ready = vm.state.value as PlayerUiState.Ready
-        assertTrue(ready.subtitleTracks.isEmpty())
-        assertNull(ready.selectedSubtitleIndex)
     }
 
     @Test
@@ -316,6 +318,39 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `the pause at the end of an episode keeps it watched`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 3_000L
+        every { player.isPlaying } returns false
+        every { player.playbackState } returns Player.STATE_ENDED
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.onEvents(
+            player,
+            events(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED),
+        )
+        testDispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), false) }
+    }
+
+    @Test
+    fun `leaving after the episode ended keeps it watched`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 3_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playbackState } returns Player.STATE_ENDED
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 3_000L, true) }
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), false) }
+    }
+
+    @Test
     fun `playback ended reports progress with played true`() = runTest(testDispatcher) {
         val listenerSlot = slot<Player.Listener>()
         every { player.addListener(capture(listenerSlot)) } just Runs
@@ -364,17 +399,6 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `failed detail fetch plays without a title`() = runTest(testDispatcher) {
-        coEvery { repository.getDetail(any()) } returns Result.failure(RuntimeException("offline"))
-        val vm = newVm()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val ready = vm.state.value as PlayerUiState.Ready
-        assertNull(ready.title)
-        assertNull(ready.episodeLine)
-    }
-
-    @Test
     fun `401 retry keeps the title`() = runTest(testDispatcher) {
         val listenerSlot = slot<Player.Listener>()
         every { player.addListener(capture(listenerSlot)) } just Runs
@@ -393,6 +417,78 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `PlayNext plays the next episode on the same player`() = runTest(testDispatcher) {
+        stubEpisodeWithNext(nextProgress = WatchProgress(positionMs = 120_000L, played = false))
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify {
+            player.setMediaItem(
+                match<MediaItem> { it.localConfiguration?.uri.toString().endsWith("/ep4") },
+                120_000L,
+            )
+        }
+        val ready = vm.state.value as PlayerUiState.Ready
+        assertEquals("Next Title", ready.title)
+        assertEquals(4, ready.episodeLine?.number)
+    }
+
+    @Test
+    fun `PlayNext reports progress for the episode being left`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        every { player.currentPosition } returns 30_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 30_000L, false) }
+        coVerify(exactly = 0) { playbackRepository.reportProgress("ep4", 30_000L, any()) }
+    }
+
+    @Test
+    fun `PlayNext saves the next episode as the start to restore`() = runTest(testDispatcher) {
+        stubEpisodeWithNext(nextProgress = WatchProgress(positionMs = 120_000L, played = false))
+        val handle = SavedStateHandle(mapOf("id" to "id1"))
+        val vm = newVm(savedStateHandle = handle)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+
+        assertEquals("jf:ep4", handle.get<String>("id"))
+        assertEquals(120_000L, handle.get<Long>("positionMs"))
+    }
+
+    @Test
+    fun `PlayNext without a next episode does nothing`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { player.setMediaItem(any<MediaItem>(), any<Long>()) }
+        coVerify(exactly = 0) { repository.getDetail("jf:ep4") }
+    }
+
+    @Test
+    fun `PlayNext after leaving does nothing`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.Exit)
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.getDetail("jf:ep4") }
+    }
+
+    @Test
     fun `onIntent Exit stops player and reports final progress`() = runTest(testDispatcher) {
         every { player.currentPosition } returns 4_000L
         val vm = newVm()
@@ -403,6 +499,21 @@ class PlayerViewModelTest {
 
         verify { player.stop() }
         coVerify { playbackRepository.reportProgress("abc123", 4_000L, false) }
+    }
+
+    @Test
+    fun `onIntent Exit after a playback error saves the position`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 40_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 40_000L, false) }
     }
 
     @Test
@@ -519,7 +630,7 @@ class PlayerViewModelTest {
             fakeSubtitleTrack(index = 3, language = "fin", title = "Finnish"),
         )
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val ready = vm.state.value as PlayerUiState.Ready
@@ -534,7 +645,7 @@ class PlayerViewModelTest {
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
         val mediaItemSlot = slot<MediaItem>()
         every { player.setMediaItem(capture(mediaItemSlot), any<Long>()) } just Runs
-        newVmFromDetail()
+        newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val configs = mediaItemSlot.captured.localConfiguration?.subtitleConfigurations.orEmpty()
@@ -550,7 +661,7 @@ class PlayerViewModelTest {
         )
         every { player.currentTracks } returns fakeTextTracks(2, 3)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val ready = vm.state.value as PlayerUiState.Ready
@@ -567,7 +678,7 @@ class PlayerViewModelTest {
         )
         every { player.currentTracks } returns fakeTextTracks(2, 3)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val ready = vm.state.value as PlayerUiState.Ready
@@ -578,7 +689,7 @@ class PlayerViewModelTest {
     fun `no default and no preference leaves subtitles off`() = runTest(testDispatcher) {
         val tracks = listOf(fakeSubtitleTrack(index = 2, language = "eng", isDefault = false))
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         val ready = vm.state.value as PlayerUiState.Ready
@@ -591,7 +702,7 @@ class PlayerViewModelTest {
         val tracks = listOf(fakeSubtitleTrack(index = 2, language = "eng", title = "English"))
         every { player.currentTracks } returns fakeTextTracks(2)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onIntent(PlayerIntent.SelectSubtitleTrack(2))
@@ -611,7 +722,7 @@ class PlayerViewModelTest {
         )
         every { player.currentTracks } returns fakeTextTracks(2, 5)
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onIntent(PlayerIntent.SelectSubtitleTrack(5))
@@ -626,7 +737,7 @@ class PlayerViewModelTest {
         coEvery { subtitlePreferenceStore.current() } returns "eng"
         val tracks = listOf(fakeSubtitleTrack(index = 2, language = "eng", isDefault = true))
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail(fakePlay(tracks)))
-        val vm = newVmFromDetail()
+        val vm = newVm()
         testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onIntent(PlayerIntent.SelectSubtitleTrack(null))
@@ -636,6 +747,120 @@ class PlayerViewModelTest {
         assertNull(ready.selectedSubtitleIndex)
         assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
         coVerify(exactly = 0) { subtitlePreferenceStore.savePreferredLanguage(any()) }
+    }
+
+    @Test
+    fun `playing reports progress every 15 seconds`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 20_000L
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.advanceTimeBy(15_001L)
+        coVerify(exactly = 1) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+        testDispatcher.scheduler.advanceTimeBy(15_000L)
+        coVerify(exactly = 2) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun `pausing reports progress once and stops the periodic report`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 20_000L
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.runCurrent()
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+
+        coVerify(exactly = 1) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+    }
+
+    @Test
+    fun `position updates every half second while playing`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 1_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.runCurrent()
+        every { player.currentPosition } returns 1_500L
+        testDispatcher.scheduler.advanceTimeBy(501L)
+
+        assertEquals(1_500L, (vm.state.value as PlayerUiState.Ready).positionMs)
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun `controls hide 3 seconds after the last interaction`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.ShowControls)
+        testDispatcher.scheduler.advanceTimeBy(2_000L)
+        vm.onIntent(PlayerIntent.ShowControls)
+        testDispatcher.scheduler.advanceTimeBy(2_000L)
+        assertTrue((vm.state.value as PlayerUiState.Ready).controlsVisible)
+
+        testDispatcher.scheduler.advanceTimeBy(1_001L)
+        assertFalse((vm.state.value as PlayerUiState.Ready).controlsVisible)
+    }
+
+    @Test
+    fun `controls stay visible while the subtitle menu is open`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.OpenSubtitleMenu)
+        testDispatcher.scheduler.advanceTimeBy(10_000L)
+
+        assertTrue((vm.state.value as PlayerUiState.Ready).controlsVisible)
+    }
+
+    @Test
+    fun `seek waiting when Next is pressed does not seek the next episode`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 60_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.seekTo(any()) }
+    }
+
+    @Test
+    fun `late pause event from the left episode never reports under the next one`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        stubEpisodeWithNext()
+        coEvery { repository.getDetail("jf:ep4") } coAnswers {
+            delay(1_000L.milliseconds)
+            Result.success(fakeDetail(play = fakePlay().copy(streamUrl = "https://api.stoganet.com/stream/ep4")))
+        }
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val oldListener = listenerSlot.captured
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.runCurrent()
+        oldListener.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress("ep4", any(), any()) }
     }
 
     @Test

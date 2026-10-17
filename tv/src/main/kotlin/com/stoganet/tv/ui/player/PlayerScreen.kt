@@ -50,12 +50,11 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
     player: ExoPlayer? = null,
     onIntent: (PlayerIntent) -> Unit = {},
-    onNextEpisode: (NextEpisodeUi) -> Unit = {},
 ) {
-    // The old player stays on screen while the next one fades in, so presses after leaving are dropped
+    // The player stays on screen while it fades out after Back, so presses after leaving are dropped
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val leave = { if (lifecycle.isResumed()) onBack() }
-    val openNextEpisode: (NextEpisodeUi) -> Unit = { if (lifecycle.isResumed()) onNextEpisode(it) }
+    val playNext = { if (lifecycle.isResumed()) onIntent(PlayerIntent.PlayNext) }
 
     BackHandler(
         onBack = {
@@ -97,7 +96,7 @@ fun PlayerScreen(
             state = state,
             player = player,
             onIntent = onIntent,
-            onNextEpisode = openNextEpisode,
+            onNextEpisode = playNext,
             modifier = modifier,
         )
     }
@@ -110,7 +109,7 @@ private fun ReadyPlayerContent(
     state: PlayerUiState.Ready,
     player: ExoPlayer?,
     onIntent: (PlayerIntent) -> Unit,
-    onNextEpisode: (NextEpisodeUi) -> Unit,
+    onNextEpisode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val surfaceFocusRequester = remember { FocusRequester() }

@@ -3,10 +3,13 @@ package com.stoganet.core.data.auth
 import com.stoganet.core.api.model.QuickConnectStartResponse
 import com.stoganet.core.data.net.StoganetApi
 import com.stoganet.core.util.logOnFailure
+import kotlinx.coroutines.flow.Flow
 
 private const val TAG = "AuthRepository"
 
 class AuthRepository(private val api: StoganetApi, private val tokenStore: TokenStore) {
+
+    val isSignedIn: Flow<Boolean> = tokenStore.isAuthenticated
 
     suspend fun login(username: String, password: String, deviceLabel: String?): Result<LoginResult> = runCatching {
         api.login(username, password, deviceLabel)

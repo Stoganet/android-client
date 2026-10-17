@@ -50,7 +50,7 @@ import kotlin.time.Duration.Companion.milliseconds
 internal fun ControlsOverlay(
     state: PlayerUiState.Ready,
     onIntent: (PlayerIntent) -> Unit,
-    onNextEpisode: (NextEpisodeUi) -> Unit,
+    onNextEpisode: () -> Unit,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -90,7 +90,7 @@ internal fun ControlsOverlay(
                 PlayerIconButton(
                     iconRes = R.drawable.ic_skip_next,
                     label = nextEpisodeLabel,
-                    onClick = { onNextEpisode(state.nextEpisode) },
+                    onClick = onNextEpisode,
                 )
             }
             Spacer(Modifier.weight(1f))

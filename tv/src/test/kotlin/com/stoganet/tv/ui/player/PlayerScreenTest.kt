@@ -28,7 +28,6 @@ import io.mockk.mockk
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -218,8 +217,8 @@ class PlayerScreenTest {
     }
 
     @Test
-    fun readyState_withNextEpisode_nextButtonOpensIt() = runComposeUiTest {
-        var opened: NextEpisodeUi? = null
+    fun readyState_withNextEpisode_nextButtonPlaysIt() = runComposeUiTest {
+        val intents = mutableListOf<PlayerIntent>()
         val next = NextEpisodeUi(id = "jf:ep4", positionMs = 0L)
         setContent {
             PlayerScreen(
@@ -232,7 +231,7 @@ class PlayerScreenTest {
                 ),
                 onBack = {},
                 player = mockPlayer,
-                onNextEpisode = { opened = it },
+                onIntent = { intents += it },
             )
         }
 
@@ -242,7 +241,7 @@ class PlayerScreenTest {
         nextButton.performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
 
-        assertEquals(next, opened)
+        assertTrue(PlayerIntent.PlayNext in intents)
     }
 
     @Test
@@ -267,7 +266,7 @@ class PlayerScreenTest {
 
     @Test
     fun leavingScreen_nextButtonIsIgnored() = runComposeUiTest {
-        var opened: NextEpisodeUi? = null
+        val intents = mutableListOf<PlayerIntent>()
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides leavingLifecycleOwner()) {
                 PlayerScreen(
@@ -280,7 +279,7 @@ class PlayerScreenTest {
                     ),
                     onBack = {},
                     player = mockPlayer,
-                    onNextEpisode = { opened = it },
+                    onIntent = { intents += it },
                 )
             }
         }
@@ -291,7 +290,7 @@ class PlayerScreenTest {
         nextButton.performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
 
-        assertNull(opened)
+        assertFalse(PlayerIntent.PlayNext in intents)
     }
 
     @Test
