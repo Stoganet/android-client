@@ -12,6 +12,7 @@ import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
 import com.stoganet.tv.R
@@ -21,6 +22,12 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -28,6 +35,7 @@ class DetailViewModel(
     private val id: String,
     private val repository: DetailRepository,
     private val searchRepository: SearchRepository,
+    playbackRepository: PlaybackRepository,
     private val userMessageCenter: UserMessageCenter,
 ) : ViewModel() {
 
@@ -36,6 +44,15 @@ class DetailViewModel(
 
     init {
         loadDetail()
+        val visible = _state.subscriptionCount.map { it > 0 }.distinctUntilChanged()
+        viewModelScope.launch {
+            combine(visible, playbackRepository.lastProgress.drop(1)) { isVisible, progress ->
+                progress.takeIf { isVisible }
+            }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collectLatest { refreshDetail() }
+        }
     }
 
     fun onIntent(intent: DetailIntent) {
@@ -75,6 +92,23 @@ class DetailViewModel(
             repository.getDetail(id)
                 .onSuccess { detail -> _state.update { detail.toUiState() } }
                 .onFailure { _state.update { DetailUiState.Error } }
+        }
+    }
+
+    private suspend fun refreshDetail() {
+        val season = (_state.value as? DetailUiState.Content)?.selectedSeason
+        val detail = repository.getDetail(id).getOrNull() ?: return
+        val episodes = season?.let { repository.getEpisodes(id, it).getOrNull() }
+        _state.update { state ->
+            val current = state as? DetailUiState.Content ?: return@update state
+            val refreshedEpisodes = episodes
+                ?.takeIf { current.selectedSeason == season }
+                ?.map { it.toUiState() }
+                ?.toImmutableList()
+            detail.toUiState().copy(
+                selectedSeason = current.selectedSeason,
+                episodes = refreshedEpisodes ?: current.episodes,
+            )
         }
     }
 
@@ -144,6 +178,7 @@ class DetailViewModel(
                     id = id,
                     repository = app.services.detailRepository,
                     searchRepository = app.services.searchRepository,
+                    playbackRepository = app.services.playbackRepository,
                     userMessageCenter = app.services.userMessageCenter,
                 )
             }

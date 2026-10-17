@@ -9,16 +9,24 @@ import com.stoganet.core.api.model.PlayInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.api.model.WatchProgress
 import com.stoganet.core.data.detail.DetailRepository
+import com.stoganet.core.data.playback.PlaybackRepository
+import com.stoganet.core.data.playback.ProgressUpdate
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
 import com.stoganet.tv.R
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -38,11 +46,14 @@ class DetailViewModelTest {
     private val repository = mockk<DetailRepository>()
     private val searchRepository = mockk<SearchRepository>()
     private val userMessageCenter = mockk<UserMessageCenter>(relaxed = true)
+    private val savedProgress = MutableStateFlow<ProgressUpdate?>(null)
+    private val playbackRepository = mockk<PlaybackRepository> { every { lastProgress } returns savedProgress }
 
     private fun newVm(id: String = "id1") = DetailViewModel(
         id = id,
         repository = repository,
         searchRepository = searchRepository,
+        playbackRepository = playbackRepository,
         userMessageCenter = userMessageCenter,
     )
 
@@ -72,6 +83,19 @@ class DetailViewModelTest {
         seasons = emptyList(),
         play = play,
     )
+
+    private fun pilot(progress: WatchProgress? = null) = Episode(
+        id = "ep1",
+        number = 1,
+        seasonNumber = 1,
+        title = "Pilot",
+        state = MediaState.PLAYABLE,
+        progress = progress,
+    )
+
+    // Detail's UI collects state only while the screen is visible
+    private fun TestScope.show(vm: DetailViewModel): Job =
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
 
     @Test
     fun `loads Content on success`() = runTest {
@@ -232,6 +256,97 @@ class DetailViewModelTest {
 
         val episodes = (vm.state.value as DetailUiState.Content).episodes
         assertEquals(listOf(true, false), episodes.map { it.isPlayable })
+    }
+
+    @Test
+    fun `progress saved while shown refreshes detail`() = runTest {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        show(newVm())
+
+        savedProgress.value = ProgressUpdate("jf-uuid", 60_000L, false)
+
+        coVerify(exactly = 2) { repository.getDetail("id1") }
+    }
+
+    @Test
+    fun `progress saved while hidden refreshes detail once shown again`() = runTest {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        val vm = newVm()
+
+        savedProgress.value = ProgressUpdate("jf-uuid", 30_000L, false)
+        savedProgress.value = ProgressUpdate("jf-uuid", 60_000L, false)
+        coVerify(exactly = 1) { repository.getDetail("id1") }
+
+        show(vm).cancel()
+        coVerify(exactly = 2) { repository.getDetail("id1") }
+
+        show(vm)
+        coVerify(exactly = 2) { repository.getDetail("id1") }
+    }
+
+    @Test
+    fun `progress saved before the screen opened does not refresh`() = runTest {
+        coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
+        savedProgress.value = ProgressUpdate("jf-other", 60_000L, false)
+
+        show(newVm())
+
+        coVerify(exactly = 1) { repository.getDetail("id1") }
+    }
+
+    @Test
+    fun `refresh shows the new resume point without a loading state`() = runTest {
+        coEvery { repository.getDetail(any()) } returnsMany listOf(
+            Result.success(fakeDetail()),
+            Result.success(fakeDetail().copy(progress = WatchProgress(positionMs = 60_000L, played = false))),
+        )
+        val vm = newVm()
+        val states = mutableListOf<DetailUiState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.toList(states) }
+
+        savedProgress.value = ProgressUpdate("jf-uuid", 60_000L, false)
+
+        assertEquals(60_000L, (vm.state.value as DetailUiState.Content).positionMs)
+        assertFalse(states.any { it is DetailUiState.Loading })
+    }
+
+    @Test
+    fun `refresh keeps the selected season and reloads its episodes`() = runTest {
+        val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
+        coEvery { repository.getDetail(any()) } returns
+            Result.success(fakeDetail().copy(type = MediaType.TV, seasons = listOf(season)))
+        val watched = WatchProgress(positionMs = 60_000L, played = false)
+        coEvery { repository.getEpisodes(any(), 1) } returnsMany listOf(
+            Result.success(
+                listOf(pilot()),
+            ),
+            Result.success(
+                listOf(pilot(progress = watched)),
+            ),
+        )
+        val vm = newVm()
+        show(vm)
+        vm.onIntent(DetailIntent.SelectSeason(1))
+
+        savedProgress.value = ProgressUpdate("ep1", 60_000L, false)
+
+        val state = vm.state.value as DetailUiState.Content
+        assertEquals(1, state.selectedSeason)
+        assertEquals(60_000L, state.episodes.single().positionMs)
+    }
+
+    @Test
+    fun `failed refresh keeps the current content`() = runTest {
+        coEvery { repository.getDetail(any()) } returnsMany listOf(
+            Result.success(fakeDetail()),
+            Result.failure(RuntimeException("offline")),
+        )
+        val vm = newVm()
+        show(vm)
+
+        savedProgress.value = ProgressUpdate("jf-uuid", 60_000L, false)
+
+        assertEquals("Test Movie", (vm.state.value as DetailUiState.Content).title)
     }
 
     @Test
