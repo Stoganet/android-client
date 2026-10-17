@@ -27,7 +27,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -90,7 +89,6 @@ class DetailViewModelTest {
         assertEquals(1, state.cast.size)
         assertEquals("Test Actor", state.cast[0].name)
         assertTrue(state.isPlayable)
-        assertEquals("https://api.stoganet.com/stream/jf-uuid", state.streamUrl)
     }
 
     @Test
@@ -160,7 +158,6 @@ class DetailViewModelTest {
 
         val state = vm.state.value as DetailUiState.Content
         assertFalse(state.isPlayable)
-        assertNull(state.streamUrl)
     }
 
     @Test
@@ -171,7 +168,6 @@ class DetailViewModelTest {
 
         val state = vm.state.value as DetailUiState.Content
         assertFalse(state.isPlayable)
-        assertNotNull(state.streamUrl)
     }
 
     @Test
@@ -209,6 +205,33 @@ class DetailViewModelTest {
         assertEquals(1, state.selectedSeason)
         assertEquals(1, state.episodes.size)
         assertEquals("Pilot", state.episodes[0].title)
+    }
+
+    @Test
+    fun `episodes are playable only with play info`() = runTest {
+        val season = Season(number = 1, name = "Season 1", episodeCount = 2, poster = "")
+        val detail = fakeDetail().copy(type = MediaType.TV, seasons = listOf(season))
+        coEvery { repository.getDetail(any()) } returns Result.success(detail)
+        val play = PlayInfo(streamUrl = "https://api.stoganet.com/stream/ep1", subtitleTracks = emptyList())
+        coEvery { repository.getEpisodes(any(), 1) } returns Result.success(
+            listOf(
+                Episode(
+                    id = "ep1",
+                    number = 1,
+                    seasonNumber = 1,
+                    title = "Pilot",
+                    state = MediaState.PLAYABLE,
+                    play = play,
+                ),
+                Episode(id = "ep2", number = 2, seasonNumber = 1, title = "Second", state = MediaState.DOWNLOADING),
+            ),
+        )
+
+        val vm = newVm()
+        vm.onIntent(DetailIntent.SelectSeason(1))
+
+        val episodes = (vm.state.value as DetailUiState.Content).episodes
+        assertEquals(listOf(true, false), episodes.map { it.isPlayable })
     }
 
     @Test

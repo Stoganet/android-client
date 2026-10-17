@@ -51,12 +51,11 @@ private const val GRADIENT_START_ALPHA = 0.90f
 private const val PANEL_WIDTH_FRACTION = 0.52f
 private const val OVERVIEW_MAX_LINES = 7
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun DetailScreen(
     state: DetailUiState,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -94,12 +93,11 @@ fun DetailScreen(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun DetailContent(
     state: DetailUiState.Content,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -153,7 +151,7 @@ private fun DetailMetadataPanel(
     state: DetailUiState.Content,
     focusRequester: FocusRequester,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -204,10 +202,7 @@ private fun DetailMetadataPanel(
                         isPlayable = state.isPlayable,
                         positionMs = state.positionMs,
                         focusRequester = focusRequester,
-                        onNavigateToPlayer = {
-                            val url = state.streamUrl ?: return@DetailActionButton
-                            onNavigateToPlayer(state.id, url, state.positionMs)
-                        },
+                        onNavigateToPlayer = { onNavigateToPlayer(state.id, state.positionMs) },
                         onRequestMovie = { onIntent(DetailIntent.RequestMovie) },
                     )
                 }
@@ -237,13 +232,12 @@ private fun DetailMetadataPanel(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun TvActions(
     state: DetailUiState.Content,
     focusRequester: FocusRequester,
     onIntent: (DetailIntent) -> Unit,
-    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
+    onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
 ) {
     val chipFocusRequester = remember { FocusRequester() }
     val target = state.resume ?: state.start
@@ -257,7 +251,7 @@ private fun TvActions(
             }
             Button(
                 onClick = {
-                    onNavigateToPlayer(target.episodeId, target.streamUrl, target.positionMs)
+                    onNavigateToPlayer(target.episodeId, target.positionMs)
                 },
                 modifier = Modifier
                     .focusRequester(focusRequester)
@@ -312,19 +306,12 @@ private fun SeasonChips(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun EpisodeRow(
-    episode: EpisodeUiState,
-    onNavigateToPlayer: (id: String, streamUrl: String, positionMs: Long) -> Unit,
-) {
+private fun EpisodeRow(episode: EpisodeUiState, onNavigateToPlayer: (id: String, positionMs: Long) -> Unit) {
     val desc = stringResource(R.string.detail_episode_content_description, episode.number, episode.title)
     Button(
-        onClick = {
-            val url = episode.streamUrl ?: return@Button
-            onNavigateToPlayer(episode.id, url, episode.positionMs)
-        },
-        enabled = episode.streamUrl != null,
+        onClick = { onNavigateToPlayer(episode.id, episode.positionMs) },
+        enabled = episode.isPlayable,
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = desc },
@@ -350,7 +337,6 @@ private fun EpisodeRow(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun DetailActionButton(
     title: String,
@@ -406,7 +392,6 @@ private fun DetailActionButton(
     ) { Text(label) }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CastSection(cast: ImmutableList<CastMemberUiState>) {
     Column {
@@ -442,13 +427,13 @@ private fun CastSection(cast: ImmutableList<CastMemberUiState>) {
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewLoading() {
-    DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _, _ -> })
+    DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _ -> })
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewError() {
-    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _, _ -> })
+    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _ -> })
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
@@ -470,12 +455,11 @@ private fun PreviewMovieContent() {
             ),
             seasons = persistentListOf(),
             resume = null,
-            streamUrl = "https://stream.example.com/matrix",
             isPlayable = true,
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }
 
@@ -502,15 +486,13 @@ private fun PreviewTvWithSeasons() {
                 episodeNumber = 3,
                 episodeId = "ep3",
                 title = "...And the Bag's in the River",
-                streamUrl = "https://stream.example.com/bb-s01e03",
                 positionMs = 600000L,
             ),
-            streamUrl = null,
             isPlayable = false,
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }
 
@@ -533,25 +515,24 @@ private fun PreviewTvWithEpisodes() {
                 SeasonUiState(2, "Season 2", 13, null, null),
             ),
             resume = null,
-            streamUrl = null,
             selectedSeason = 1,
             episodes = persistentListOf(
                 EpisodeUiState(
                     id = "ep1", number = 1, title = "Pilot",
                     overview = "A teacher turns to crime.", runtimeMinutes = 58,
-                    thumbnailUrl = null, streamUrl = "https://stream/ep1", positionMs = 0L, played = false,
+                    thumbnailUrl = null, isPlayable = true, positionMs = 0L, played = false,
                 ),
                 EpisodeUiState(
                     id = "ep2", number = 2, title = "Cat's in the Bag",
                     overview = null, runtimeMinutes = 48,
-                    thumbnailUrl = null, streamUrl = "https://stream/ep2", positionMs = 0L, played = false,
+                    thumbnailUrl = null, isPlayable = true, positionMs = 0L, played = false,
                 ),
             ),
             isPlayable = false,
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }
 
@@ -571,12 +552,11 @@ private fun PreviewNotPlayable() {
             cast = persistentListOf(),
             seasons = persistentListOf(),
             resume = null,
-            streamUrl = null,
             isPlayable = false,
             mediaState = MediaState.PLAYABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }
 
@@ -596,12 +576,11 @@ private fun PreviewRequestable() {
             cast = persistentListOf(),
             seasons = persistentListOf(),
             resume = null,
-            streamUrl = null,
             isPlayable = false,
             mediaState = MediaState.REQUESTABLE,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }
 
@@ -621,11 +600,10 @@ private fun PreviewDownloading() {
             cast = persistentListOf(),
             seasons = persistentListOf(),
             resume = null,
-            streamUrl = null,
             isPlayable = false,
             mediaState = MediaState.DOWNLOADING,
         ),
         onIntent = {},
-        onNavigateToPlayer = { _, _, _ -> },
+        onNavigateToPlayer = { _, _ -> },
     )
 }

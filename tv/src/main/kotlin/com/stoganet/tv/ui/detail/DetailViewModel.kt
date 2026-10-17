@@ -120,7 +120,6 @@ class DetailViewModel(
         seasons = seasons.map { it.toUiState() }.toImmutableList(),
         resume = resume?.toUiState(),
         start = start?.toUiState(),
-        streamUrl = play?.streamUrl,
         isPlayable = state == MediaState.PLAYABLE && play != null,
         mediaState = state,
         positionMs = progress?.takeUnless { it.played }?.positionMs ?: 0L,
@@ -167,7 +166,7 @@ private fun Episode.toUiState() = EpisodeUiState(
     overview = overview,
     runtimeMinutes = runtime,
     thumbnailUrl = thumbnail,
-    streamUrl = play?.streamUrl,
+    isPlayable = play != null,
     positionMs = progress?.positionMs ?: 0L,
     played = progress?.played ?: false,
 )
@@ -177,6 +176,5 @@ private fun ResumeInfo.toUiState() = ResumeUiState(
     episodeNumber = episodeNumber,
     episodeId = episodeId,
     title = title,
-    streamUrl = play.streamUrl,
     positionMs = progress.positionMs,
 )

@@ -146,8 +146,8 @@ fun AppNavHost() {
             DetailScreen(
                 state = state,
                 onIntent = vm::onIntent,
-                onNavigateToPlayer = { playId, streamUrl, positionMs ->
-                    navController.navigate(AppRoutes.player(playId, streamUrl, positionMs))
+                onNavigateToPlayer = { playId, positionMs ->
+                    navController.navigate(AppRoutes.player(playId, positionMs))
                 },
             )
         }
@@ -155,11 +155,6 @@ fun AppNavHost() {
             route = AppRoutes.PLAYER,
             arguments = listOf(
                 navArgument("id") { type = NavType.StringType },
-                navArgument("streamUrl") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
                 navArgument("positionMs") {
                     type = NavType.LongType
                     defaultValue = 0L

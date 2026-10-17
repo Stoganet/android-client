@@ -62,7 +62,6 @@ class PlayerViewModel(
     private val nowPlaying = MutableStateFlow(
         NowPlaying(
             id = checkNotNull(savedStateHandle[KEY_ID]),
-            routeStreamUrl = savedStateHandle[KEY_STREAM_URL],
             startPositionMs = savedStateHandle[KEY_POSITION_MS] ?: 0L,
         ),
     )
@@ -96,7 +95,7 @@ class PlayerViewModel(
         _state.update { PlayerUiState.Loading }
         val detail = repository.getDetail(item.id).getOrNull()
         val preferredLanguage = subtitlePreferenceStore.current()
-        val source = playbackSource(detail, item.routeStreamUrl)
+        val source = playbackSource(detail)
         if (source == null) {
             _state.update { PlayerUiState.Error }
             return
@@ -214,9 +213,8 @@ class PlayerViewModel(
         val next = (_state.value as? PlayerUiState.Ready)?.nextEpisode ?: return
         if (!playback.isActive) return
         savedStateHandle[KEY_ID] = next.id
-        savedStateHandle[KEY_STREAM_URL] = null
         savedStateHandle[KEY_POSITION_MS] = next.positionMs
-        nowPlaying.value = NowPlaying(id = next.id, routeStreamUrl = null, startPositionMs = next.positionMs)
+        nowPlaying.value = NowPlaying(id = next.id, startPositionMs = next.positionMs)
     }
 
     private fun togglePlayPause() {
@@ -357,7 +355,6 @@ class PlayerViewModel(
         private const val SEEK_COMMIT_DELAY_MS = 700L
         private const val SEEK_END_MARGIN_MS = 10_000L
         private const val KEY_ID = "id"
-        private const val KEY_STREAM_URL = "streamUrl"
         private const val KEY_POSITION_MS = "positionMs"
 
         @androidx.annotation.OptIn(UnstableApi::class)
@@ -395,7 +392,7 @@ class PlayerViewModel(
     }
 }
 
-private data class NowPlaying(val id: String, val routeStreamUrl: String?, val startPositionMs: Long)
+private data class NowPlaying(val id: String, val startPositionMs: Long)
 
 // ExoPlayer wraps the HTTP error in one or more causes, and the cap stops a cause chain that loops back on itself
 private fun isUnauthorized(error: Throwable?): Boolean = generateSequence(error) { it.cause }

@@ -46,7 +46,6 @@ class DetailScreenTest {
         cast = persistentListOf(CastMemberUiState("Test Actor", "Actor")),
         seasons = persistentListOf(),
         resume = null,
-        streamUrl = if (isPlayable) "https://api.stoganet.com/stream/abc" else null,
         isPlayable = isPlayable,
         mediaState = MediaState.PLAYABLE,
     )
@@ -67,14 +66,13 @@ class DetailScreenTest {
             SeasonUiState(3, "Season 3", 10, null, null),
         ),
         resume = null,
-        streamUrl = null,
         isPlayable = false,
         mediaState = MediaState.PLAYABLE,
     )
 
     @Test
     fun loadingState_showsProgressIndicator() = runComposeUiTest {
-        setContent { DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNode(
             SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate),
@@ -83,7 +81,7 @@ class DetailScreenTest {
 
     @Test
     fun errorState_showsRetryButton() = runComposeUiTest {
-        setContent { DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNodeWithContentDescription(str(R.string.action_retry)).assertIsDisplayed()
     }
@@ -95,7 +93,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = DetailUiState.Error,
                 onIntent = { if (it == DetailIntent.Retry) intentFired = true },
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -108,7 +106,7 @@ class DetailScreenTest {
 
     @Test
     fun contentState_movie_showsTitle() = runComposeUiTest {
-        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNodeWithText("Test Movie").assertIsDisplayed()
     }
@@ -119,7 +117,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = true),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -133,7 +131,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = true),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> played = true },
+                onNavigateToPlayer = { _, _ -> played = true },
             )
         }
 
@@ -147,7 +145,7 @@ class DetailScreenTest {
 
     @Test
     fun contentState_tv_showsSeasonChips() = runComposeUiTest {
-        setContent { DetailScreen(state = fakeTvContent(), onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = fakeTvContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNodeWithContentDescription(str(R.string.detail_season_chip_content_description, 1)).assertIsDisplayed()
         onNodeWithContentDescription(str(R.string.detail_season_chip_content_description, 2)).assertIsDisplayed()
@@ -164,12 +162,11 @@ class DetailScreenTest {
                         episodeNumber = 3,
                         episodeId = "ep-resume-3",
                         title = "Resume Episode",
-                        streamUrl = "https://stream.example.com/resume",
                         positionMs = 1000L,
                     ),
                 ),
                 onIntent = {},
-                onNavigateToPlayer = { id, _, _ -> receivedId = id },
+                onNavigateToPlayer = { id, _ -> receivedId = id },
             )
         }
 
@@ -196,14 +193,14 @@ class DetailScreenTest {
                             overview = null,
                             runtimeMinutes = 40,
                             thumbnailUrl = null,
-                            streamUrl = "https://stream.example.com/ep1",
+                            isPlayable = true,
                             positionMs = 0L,
                             played = false,
                         ),
                     ),
                 ),
                 onIntent = {},
-                onNavigateToPlayer = { id, _, _ -> receivedId = id },
+                onNavigateToPlayer = { id, _ -> receivedId = id },
             )
         }
 
@@ -217,7 +214,7 @@ class DetailScreenTest {
 
     @Test
     fun contentState_showsCastMemberName() = runComposeUiTest {
-        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNodeWithText("Test Actor").assertIsDisplayed()
     }
@@ -228,7 +225,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = false),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -238,33 +235,13 @@ class DetailScreenTest {
     }
 
     @Test
-    fun contentState_movie_playButton_passesStreamUrlToCallback() = runComposeUiTest {
-        var receivedUrl: String? = null
-        val expectedUrl = "https://api.stoganet.com/stream/abc"
-        setContent {
-            DetailScreen(
-                state = fakeMovieContent(isPlayable = true).copy(streamUrl = expectedUrl),
-                onIntent = {},
-                onNavigateToPlayer = { _, url, _ -> receivedUrl = url },
-            )
-        }
-
-        val playDesc = str(R.string.detail_play_content_description, "Test Movie")
-        onNodeWithContentDescription(playDesc).requestFocus()
-        onNodeWithContentDescription(playDesc).performKeyInput { pressKey(Key.Enter) }
-        waitForIdle()
-
-        assertEquals(expectedUrl, receivedUrl)
-    }
-
-    @Test
     fun contentState_movie_playButton_passesIdToCallback() = runComposeUiTest {
         var receivedId: String? = null
         setContent {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = true),
                 onIntent = {},
-                onNavigateToPlayer = { id, _, _ -> receivedId = id },
+                onNavigateToPlayer = { id, _ -> receivedId = id },
             )
         }
 
@@ -282,7 +259,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.REQUESTABLE),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -298,7 +275,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.REQUESTABLE),
                 onIntent = { if (it == DetailIntent.RequestMovie) intentFired = true },
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -316,7 +293,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(isPlayable = false).copy(mediaState = MediaState.DOWNLOADING),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -327,7 +304,7 @@ class DetailScreenTest {
 
     @Test
     fun contentState_movie_showsYearGenresAndRuntime() = runComposeUiTest {
-        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _, _ -> }) }
+        setContent { DetailScreen(state = fakeMovieContent(), onIntent = {}, onNavigateToPlayer = { _, _ -> }) }
 
         onNodeWithText("1999 · Action, Sci-Fi · 2h 16m").assertIsDisplayed()
     }
@@ -338,7 +315,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent().copy(year = 0),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -352,7 +329,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeTvContent().copy(year = 0, genres = persistentListOf(), overview = ""),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -365,7 +342,6 @@ class DetailScreenTest {
         episodeNumber = 1,
         episodeId = "ep-1",
         title = "Pilot",
-        streamUrl = "https://stream.example.com/ep-1",
         positionMs = positionMs,
     )
 
@@ -375,7 +351,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeTvContent().copy(resume = tvResume(positionMs = 0L)),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -389,7 +365,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeTvContent().copy(resume = tvResume(positionMs = 120_000L)),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
@@ -404,7 +380,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent(),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, pos -> position = pos },
+                onNavigateToPlayer = { _, pos -> position = pos },
             )
         }
 
@@ -423,7 +399,7 @@ class DetailScreenTest {
             DetailScreen(
                 state = fakeMovieContent().copy(positionMs = 90_000L),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, pos -> position = pos },
+                onNavigateToPlayer = { _, pos -> position = pos },
             )
         }
 
@@ -437,12 +413,12 @@ class DetailScreenTest {
 
     @Test
     fun contentState_tv_finishedShow_playsFromFirstEpisode() = runComposeUiTest {
-        var received: Triple<String, String, Long>? = null
+        var received: Pair<String, Long>? = null
         setContent {
             DetailScreen(
                 state = fakeTvContent().copy(resume = null, start = tvResume(positionMs = 0L)),
                 onIntent = {},
-                onNavigateToPlayer = { id, url, pos -> received = Triple(id, url, pos) },
+                onNavigateToPlayer = { id, pos -> received = id to pos },
             )
         }
 
@@ -451,7 +427,7 @@ class DetailScreenTest {
         onNodeWithContentDescription(desc).performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
 
-        assertEquals(Triple("ep-1", "https://stream.example.com/ep-1", 0L), received)
+        assertEquals("ep-1" to 0L, received)
     }
 
     @Test
@@ -463,7 +439,7 @@ class DetailScreenTest {
                     start = tvResume(positionMs = 0L),
                 ),
                 onIntent = {},
-                onNavigateToPlayer = { _, _, _ -> },
+                onNavigateToPlayer = { _, _ -> },
             )
         }
 
