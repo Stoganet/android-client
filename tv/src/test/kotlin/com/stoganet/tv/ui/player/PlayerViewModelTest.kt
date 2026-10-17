@@ -318,6 +318,39 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `the pause at the end of an episode keeps it watched`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 3_000L
+        every { player.isPlaying } returns false
+        every { player.playbackState } returns Player.STATE_ENDED
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.onEvents(
+            player,
+            events(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED),
+        )
+        testDispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), false) }
+    }
+
+    @Test
+    fun `leaving after the episode ended keeps it watched`() = runTest(testDispatcher) {
+        every { player.currentPosition } returns 3_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        every { player.playbackState } returns Player.STATE_ENDED
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 3_000L, true) }
+        coVerify(exactly = 0) { playbackRepository.reportProgress(any(), any(), false) }
+    }
+
+    @Test
     fun `playback ended reports progress with played true`() = runTest(testDispatcher) {
         val listenerSlot = slot<Player.Listener>()
         every { player.addListener(capture(listenerSlot)) } just Runs

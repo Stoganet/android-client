@@ -160,7 +160,8 @@ class PlayerViewModel(
                 playing.value = isPlaying
                 if (!isPlaying) {
                     updatePlaybackPosition()
-                    launch { reportProgress(source, played = false) }
+                    val ended = playbackState == Player.STATE_ENDED
+                    launch { reportProgress(source, played = ended) }
                 }
             }
             if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
@@ -198,9 +199,10 @@ class PlayerViewModel(
 
     private fun leave(source: PlaybackSource) {
         val positionMs = (_state.value as? PlayerUiState.Ready)?.seekPreviewMs ?: player.currentPosition
+        val ended = player.playbackState == Player.STATE_ENDED
         player.stop()
         viewModelScope.launch {
-            withContext(NonCancellable) { reportProgress(source, played = false, positionMs = positionMs) }
+            withContext(NonCancellable) { reportProgress(source, played = ended, positionMs = positionMs) }
         }
     }
 
