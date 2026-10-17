@@ -189,6 +189,11 @@ class PlayerViewModelTest {
 
     private fun unauthorizedException(): ExoPlaybackException = httpErrorException(401)
 
+    private fun Player.Listener.isPlayingChanged(isPlaying: Boolean) {
+        every { player.isPlaying } returns isPlaying
+        onEvents(player, events(Player.EVENT_IS_PLAYING_CHANGED))
+    }
+
     private fun stubEpisodeWithNext(nextProgress: WatchProgress? = null) {
         val next = NextEpisode(
             id = "jf:ep4",
@@ -510,6 +515,21 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `onIntent Exit after a playback error saves the position`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 40_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.onEvents(player, events(Player.EVENT_PLAYER_ERROR))
+        vm.onIntent(PlayerIntent.Exit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify { playbackRepository.reportProgress("abc123", 40_000L, false) }
+    }
+
+    @Test
     fun `onIntent Exit while loading keeps the saved position`() = runTest(testDispatcher) {
         val vm = newVm()
 
@@ -740,6 +760,120 @@ class PlayerViewModelTest {
         assertNull(ready.selectedSubtitleIndex)
         assertTrue(trackParamsSlot.captured.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
         coVerify(exactly = 0) { subtitlePreferenceStore.savePreferredLanguage(any()) }
+    }
+
+    @Test
+    fun `playing reports progress every 15 seconds`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 20_000L
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.advanceTimeBy(15_001L)
+        coVerify(exactly = 1) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+        testDispatcher.scheduler.advanceTimeBy(15_000L)
+        coVerify(exactly = 2) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun `pausing reports progress once and stops the periodic report`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 20_000L
+        newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.runCurrent()
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+
+        coVerify(exactly = 1) { playbackRepository.reportProgress("abc123", 20_000L, false) }
+    }
+
+    @Test
+    fun `position updates every half second while playing`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        every { player.currentPosition } returns 1_000L
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        listenerSlot.captured.isPlayingChanged(true)
+        testDispatcher.scheduler.runCurrent()
+        every { player.currentPosition } returns 1_500L
+        testDispatcher.scheduler.advanceTimeBy(501L)
+
+        assertEquals(1_500L, (vm.state.value as PlayerUiState.Ready).positionMs)
+        listenerSlot.captured.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun `controls hide 3 seconds after the last interaction`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.ShowControls)
+        testDispatcher.scheduler.advanceTimeBy(2_000L)
+        vm.onIntent(PlayerIntent.ShowControls)
+        testDispatcher.scheduler.advanceTimeBy(2_000L)
+        assertTrue((vm.state.value as PlayerUiState.Ready).controlsVisible)
+
+        testDispatcher.scheduler.advanceTimeBy(1_001L)
+        assertFalse((vm.state.value as PlayerUiState.Ready).controlsVisible)
+    }
+
+    @Test
+    fun `controls stay visible while the subtitle menu is open`() = runTest(testDispatcher) {
+        val vm = newVm()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.OpenSubtitleMenu)
+        testDispatcher.scheduler.advanceTimeBy(10_000L)
+
+        assertTrue((vm.state.value as PlayerUiState.Ready).controlsVisible)
+    }
+
+    @Test
+    fun `seek waiting when Next is pressed does not seek the next episode`() = runTest(testDispatcher) {
+        stubEpisodeWithNext()
+        every { player.currentPosition } returns 5_000L
+        every { player.duration } returns 60_000L
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onIntent(PlayerIntent.SeekForward())
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { player.seekTo(any()) }
+    }
+
+    @Test
+    fun `late pause event from the left episode never reports under the next one`() = runTest(testDispatcher) {
+        val listenerSlot = slot<Player.Listener>()
+        every { player.addListener(capture(listenerSlot)) } just Runs
+        stubEpisodeWithNext()
+        coEvery { repository.getDetail("jf:ep4") } coAnswers {
+            delay(1_000L.milliseconds)
+            Result.success(fakeDetail(play = fakePlay().copy(streamUrl = "https://api.stoganet.com/stream/ep4")))
+        }
+        val vm = newVmFromDetail()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val oldListener = listenerSlot.captured
+
+        vm.onIntent(PlayerIntent.PlayNext)
+        testDispatcher.scheduler.runCurrent()
+        oldListener.isPlayingChanged(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { playbackRepository.reportProgress("ep4", any(), any()) }
     }
 
     @Test
