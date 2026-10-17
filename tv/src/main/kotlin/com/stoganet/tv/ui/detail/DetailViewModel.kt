@@ -13,6 +13,7 @@ import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.PlaybackRepository
+import com.stoganet.core.data.playback.resumePositionMs
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
 import com.stoganet.tv.R
@@ -156,7 +157,7 @@ class DetailViewModel(
         start = start?.toUiState(),
         isPlayable = state == MediaState.PLAYABLE && play != null,
         mediaState = state,
-        positionMs = progress?.takeUnless { it.played }?.positionMs ?: 0L,
+        positionMs = progress.resumePositionMs(),
     )
 
     companion object {
@@ -202,7 +203,7 @@ private fun Episode.toUiState() = EpisodeUiState(
     runtimeMinutes = runtime,
     thumbnailUrl = thumbnail,
     isPlayable = play != null,
-    positionMs = progress?.positionMs ?: 0L,
+    positionMs = progress.resumePositionMs(),
     played = progress?.played ?: false,
 )
 

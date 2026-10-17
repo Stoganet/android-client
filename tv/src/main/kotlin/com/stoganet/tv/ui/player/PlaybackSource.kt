@@ -4,6 +4,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import com.stoganet.core.api.model.LibraryDetail
+import com.stoganet.core.data.playback.resumePositionMs
 
 internal data class PlaybackSource(
     val streamUrl: String,
@@ -20,10 +21,7 @@ internal fun playbackSource(detail: LibraryDetail?): PlaybackSource? {
         subtitleTracks = play.subtitleTracks.map { SubtitleTrackUi(it.index, it.language, it.title, it.isDefault) },
         title = detail.title,
         episodeLine = detail.episode?.let { EpisodeLineUi(it.series.title, it.seasonNumber, it.number) },
-        nextEpisode = detail.episode?.next?.let { next ->
-            val progress = next.progress
-            NextEpisodeUi(next.id, if (progress == null || progress.played) 0L else progress.positionMs)
-        },
+        nextEpisode = detail.episode?.next?.let { NextEpisodeUi(it.id, it.progress.resumePositionMs()) },
     )
 }
 

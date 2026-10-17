@@ -350,6 +350,22 @@ class DetailViewModelTest {
     }
 
     @Test
+    fun `a watched episode plays from the beginning`() = runTest {
+        val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
+        coEvery { repository.getDetail(any()) } returns
+            Result.success(fakeDetail().copy(type = MediaType.TV, seasons = listOf(season)))
+        coEvery { repository.getEpisodes(any(), 1) } returns
+            Result.success(listOf(pilot(progress = WatchProgress(positionMs = 2_400_000L, played = true))))
+
+        val vm = newVm()
+        vm.onIntent(DetailIntent.SelectSeason(1))
+
+        val episode = (vm.state.value as DetailUiState.Content).episodes.single()
+        assertEquals(0L, episode.positionMs)
+        assertTrue(episode.played)
+    }
+
+    @Test
     fun `selectSeason reverts selectedSeason on fetch failure`() = runTest {
         val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
         val detail = fakeDetail().copy(type = MediaType.TV, seasons = listOf(season))
