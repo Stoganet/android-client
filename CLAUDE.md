@@ -42,7 +42,7 @@ and regenerate before implementing the repository method.
 
 ## Architecture invariants
 
-These cross-file constraints matter when editing — violating any is a 🔴 Important in review:
+These cross-file constraints matter when editing — violating any is a must-fix in review:
 
 - **`refreshTokens` calls `markAsRefreshTokenRequest()`** — without it, a 401 on the refresh
   request triggers another refresh attempt → infinite loop.
