@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlin.time.Duration.Companion.milliseconds
@@ -41,19 +42,24 @@ class SearchViewModel(private val repository: SearchRepository) : ViewModel() {
     )
     private var query = ""
 
+    // A cancelled search leaves its Loading behind, so fall back to the last state that was not one
+    private var settled: SearchUiState = SearchUiState.Empty()
+
     val state: StateFlow<SearchUiState> = requests
         .transformLatest { request ->
             when {
                 request.query.isBlank() -> emit(SearchUiState.Empty(request.query))
 
-                request.query.length >= MIN_QUERY_LENGTH -> {
+                request.query.length < MIN_QUERY_LENGTH -> emit(settled)
+
+                else -> {
                     if (request is Request.Typed) delay(DEBOUNCE_MS.milliseconds)
-                    val stateBeforeCall = state.value
                     emit(SearchUiState.Loading(request.query))
-                    emit(search(request.query) ?: stateBeforeCall)
+                    emit(search(request.query) ?: settled)
                 }
             }
         }
+        .onEach { if (it !is SearchUiState.Loading) settled = it }
         .stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState.Empty())
 
     fun onIntent(intent: SearchIntent) {

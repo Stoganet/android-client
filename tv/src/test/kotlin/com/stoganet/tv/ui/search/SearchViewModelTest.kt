@@ -277,4 +277,44 @@ class SearchViewModelTest {
 
         assertInstanceOf(SearchUiState.Results::class.java, vm.state.value)
     }
+
+    @Test
+    fun `backspacing to 1 char during a search restores the last results`() = runTest(testDispatcher) {
+        val inFlight = CompletableDeferred<Result<List<LibraryItem>>>()
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("ne") } coAnswers { inFlight.await() }
+        val vm = searchViewModel()
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        val results = vm.state.value
+
+        vm.onIntent(SearchIntent.QueryChanged("ne"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        vm.onIntent(SearchIntent.QueryChanged("n"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        inFlight.complete(Result.success(listOf(fakeItem(id = "stale"))))
+
+        assertEquals(results, vm.state.value)
+    }
+
+    @Test
+    fun `429 after a cancelled search restores the last results`() = runTest(testDispatcher) {
+        val inFlight = CompletableDeferred<Result<List<LibraryItem>>>()
+        coEvery { repository.search("movie") } returns Result.success(listOf(fakeItem()))
+        coEvery { repository.search("ne") } coAnswers { inFlight.await() }
+        coEvery { repository.search("neo") } returns
+            Result.failure(SearchApiException(HttpStatusCode.TooManyRequests))
+        val vm = searchViewModel()
+        vm.onIntent(SearchIntent.QueryChanged("movie"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        val results = vm.state.value
+
+        vm.onIntent(SearchIntent.QueryChanged("ne"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        vm.onIntent(SearchIntent.QueryChanged("neo"))
+        testDispatcher.scheduler.advanceUntilIdle()
+        inFlight.complete(Result.success(emptyList()))
+
+        assertEquals(results, vm.state.value)
+    }
 }
