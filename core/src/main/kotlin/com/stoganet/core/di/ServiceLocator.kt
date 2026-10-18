@@ -35,7 +35,7 @@ class ServiceLocator(context: Context) {
 
     val libraryRepository: LibraryRepository by lazy { LibraryRepository(stoganetApi) }
 
-    val detailRepository: DetailRepository by lazy { DetailRepository(stoganetApi) }
+    val detailRepository: DetailRepository by lazy { DetailRepository(stoganetApi, playbackRepository) }
 
     val playbackRepository: PlaybackRepository by lazy { PlaybackRepository(stoganetApi) }
 
