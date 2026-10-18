@@ -11,10 +11,12 @@ import com.stoganet.core.data.auth.TokenStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuickConnectViewModelTest {
@@ -131,6 +134,50 @@ class QuickConnectViewModelTest {
 
         try {
             coVerify(exactly = 2) { repository.startQuickConnect() }
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun `Retry stops polling the old code`() = runTest {
+        setMainDispatcher(testScheduler)
+        coEvery { repository.startQuickConnect() } returnsMany listOf(
+            Result.success(QuickConnectStartResponse(code = "OLD111", pollToken = "old")),
+            Result.success(QuickConnectStartResponse(code = "NEW222", pollToken = "new")),
+        )
+        coEvery { repository.pollQuickConnect(any()) } returns Result.success(QuickConnectPollResult.Pending)
+
+        val viewModel = QuickConnectViewModel(repository, tokenStore)
+        try {
+            advanceTimeBy(3_500.milliseconds)
+            viewModel.onIntent(QuickConnectIntent.Retry)
+            advanceTimeBy(10_000.milliseconds)
+
+            coVerify(exactly = 2) { repository.pollQuickConnect("old") }
+            assertEquals("NEW222", viewModel.state.value.code)
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun `Retry while the code is still loading drops the old attempt`() = runTest {
+        setMainDispatcher(testScheduler)
+        val firstStart = CompletableDeferred<Result<QuickConnectStartResponse>>()
+        coEvery { repository.startQuickConnect() } coAnswers { firstStart.await() } coAndThen {
+            Result.success(QuickConnectStartResponse(code = "NEW222", pollToken = "new"))
+        }
+        coEvery { repository.pollQuickConnect(any()) } returns Result.success(QuickConnectPollResult.Pending)
+
+        val viewModel = QuickConnectViewModel(repository, tokenStore)
+        try {
+            viewModel.onIntent(QuickConnectIntent.Retry)
+            firstStart.complete(Result.success(QuickConnectStartResponse(code = "OLD111", pollToken = "old")))
+            advanceTimeBy(10_000)
+
+            assertEquals("NEW222", viewModel.state.value.code)
+            coVerify(exactly = 0) { repository.pollQuickConnect("old") }
         } finally {
             viewModel.viewModelScope.cancel()
         }
