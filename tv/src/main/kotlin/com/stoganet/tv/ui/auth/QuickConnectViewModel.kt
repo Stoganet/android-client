@@ -10,69 +10,79 @@ import com.stoganet.core.data.auth.AuthRepository
 import com.stoganet.core.data.auth.QuickConnectPollResult
 import com.stoganet.core.data.auth.TokenStore
 import com.stoganet.tv.StoganetApp
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformWhile
 import kotlin.time.Duration.Companion.milliseconds
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class QuickConnectViewModel(private val repository: AuthRepository, private val tokenStore: TokenStore) : ViewModel() {
 
-    private val _state = MutableStateFlow(QuickConnectUiState())
-    val state: StateFlow<QuickConnectUiState> = _state.asStateFlow()
+    private val retries = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
-    private var pollJob: Job? = null
-
-    init {
-        startAuth()
-    }
+    val state: StateFlow<QuickConnectUiState> = retries
+        .onStart { emit(Unit) }
+        .flatMapLatest { attempt() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, QuickConnectUiState())
 
     fun onIntent(intent: QuickConnectIntent) {
         when (intent) {
-            QuickConnectIntent.Retry -> {
-                pollJob?.cancel()
-                startAuth()
-            }
+            QuickConnectIntent.Retry -> retries.tryEmit(Unit)
         }
     }
 
-    private fun startAuth() {
-        _state.update { it.copy(code = "", status = QuickConnectUiState.Status.Loading) }
-        viewModelScope.launch {
-            repository.startQuickConnect()
-                .onSuccess { start ->
-                    _state.update { it.copy(code = start.code, status = QuickConnectUiState.Status.WaitingForApproval) }
-                    pollJob = launch { pollLoop(start.pollToken) }
-                }
-                .onFailure {
-                    _state.update { it.copy(status = QuickConnectUiState.Status.Error) }
-                }
+    private fun attempt(): Flow<QuickConnectUiState> = flow {
+        emit(QuickConnectUiState())
+        val start = repository.startQuickConnect().getOrElse {
+            emit(QuickConnectUiState(status = QuickConnectUiState.Status.Error))
+            return@flow
         }
+        val waiting = QuickConnectUiState(start.code, QuickConnectUiState.Status.WaitingForApproval)
+        emit(waiting)
+        emitAll(
+            pollResults(start.pollToken).transformWhile { result ->
+                result.fold(
+                    onSuccess = { poll ->
+                        when (poll) {
+                            QuickConnectPollResult.Pending -> true
+
+                            is QuickConnectPollResult.Success -> {
+                                tokenStore.saveTokens(poll.tokens)
+                                false
+                            }
+
+                            QuickConnectPollResult.Expired -> {
+                                emit(waiting.copy(status = QuickConnectUiState.Status.Expired))
+                                false
+                            }
+                        }
+                    },
+                    onFailure = {
+                        emit(waiting.copy(status = QuickConnectUiState.Status.Error))
+                        false
+                    },
+                )
+            },
+        )
     }
 
-    private suspend fun pollLoop(pollToken: String) {
+    private fun pollResults(pollToken: String): Flow<Result<QuickConnectPollResult>> = flow {
         while (true) {
-            when (
-                val result = repository.pollQuickConnect(pollToken).getOrElse {
-                    _state.update { it.copy(status = QuickConnectUiState.Status.Error) }
-                    return
-                }
-            ) {
-                QuickConnectPollResult.Pending -> delay(POLL_INTERVAL_MS.milliseconds)
-
-                is QuickConnectPollResult.Success -> {
-                    tokenStore.saveTokens(result.tokens)
-                    return
-                }
-
-                QuickConnectPollResult.Expired -> {
-                    _state.update { it.copy(status = QuickConnectUiState.Status.Expired) }
-                    return
-                }
-            }
+            emit(repository.pollQuickConnect(pollToken))
+            delay(POLL_INTERVAL_MS.milliseconds)
         }
     }
 

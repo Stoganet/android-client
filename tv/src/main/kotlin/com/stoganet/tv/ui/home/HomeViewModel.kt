@@ -13,43 +13,58 @@ import com.stoganet.core.data.home.HomeRepository
 import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
 
-    private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
-    val state: StateFlow<HomeUiState> = _state.asStateFlow()
+    private val retries = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    private val focusedItemKey = MutableStateFlow<String?>(null)
 
-    init {
-        loadHome()
-    }
+    val state: StateFlow<HomeUiState> = combine(
+        retries.onStart { emit(Unit) }.flatMapLatest { load() },
+        focusedItemKey,
+    ) { home, focusedKey ->
+        if (home is HomeUiState.Content) home.copy(focusedItemKey = focusedKey) else home
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState.Loading)
 
     fun onIntent(intent: HomeIntent) {
         when (intent) {
-            HomeIntent.Retry -> loadHome()
-
-            is HomeIntent.ItemClicked -> _state.update { current ->
-                if (current is HomeUiState.Content) current.copy(focusedItemKey = intent.key) else current
+            HomeIntent.Retry -> {
+                focusedItemKey.value = null
+                retries.tryEmit(Unit)
             }
+
+            is HomeIntent.ItemClicked -> focusedItemKey.value = intent.key
         }
     }
 
-    private fun loadHome() {
-        _state.update { HomeUiState.Loading }
-        viewModelScope.launch {
-            repository.getHome()
-                .onSuccess { response ->
-                    val sections = response.sections.map { it.toUiState() }.toImmutableList()
-                    _state.update { HomeUiState.Content(sections) }
-                }
-                .onFailure {
-                    _state.update { HomeUiState.Error }
-                }
-        }
+    private fun load(): Flow<HomeUiState> = flow {
+        emit(HomeUiState.Loading)
+        emit(
+            repository.getHome().fold(
+                onSuccess = { response ->
+                    HomeUiState.Content(
+                        response.sections.map { it.toUiState() }.toImmutableList(),
+                    )
+                },
+                onFailure = { HomeUiState.Error },
+            ),
+        )
     }
 
     private fun HomeSection.toUiState() = HomeSectionUiState(

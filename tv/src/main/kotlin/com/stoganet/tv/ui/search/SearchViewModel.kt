@@ -15,12 +15,14 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val MIN_QUERY_LENGTH = 2
@@ -46,19 +48,7 @@ class SearchViewModel(private val repository: SearchRepository) : ViewModel() {
     private var settled: SearchUiState = SearchUiState.Empty()
 
     val state: StateFlow<SearchUiState> = requests
-        .transformLatest { request ->
-            when {
-                request.query.isBlank() -> emit(SearchUiState.Empty(request.query))
-
-                request.query.length < MIN_QUERY_LENGTH -> emit(settled)
-
-                else -> {
-                    if (request is Request.Typed) delay(DEBOUNCE_MS.milliseconds)
-                    emit(SearchUiState.Loading(request.query))
-                    emit(search(request.query) ?: settled)
-                }
-            }
-        }
+        .flatMapLatest { request -> results(request) }
         .onEach { if (it !is SearchUiState.Loading) settled = it }
         .stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState.Empty())
 
@@ -70,6 +60,20 @@ class SearchViewModel(private val repository: SearchRepository) : ViewModel() {
             }
 
             SearchIntent.Submit -> if (query.length >= MIN_QUERY_LENGTH) requests.tryEmit(Request.Submitted(query))
+        }
+    }
+
+    private fun results(request: Request): Flow<SearchUiState> = flow {
+        when {
+            request.query.isBlank() -> emit(SearchUiState.Empty(request.query))
+
+            request.query.length < MIN_QUERY_LENGTH -> emit(settled)
+
+            else -> {
+                if (request is Request.Typed) delay(DEBOUNCE_MS.milliseconds)
+                emit(SearchUiState.Loading(request.query))
+                emit(search(request.query) ?: settled)
+            }
         }
     }
 
