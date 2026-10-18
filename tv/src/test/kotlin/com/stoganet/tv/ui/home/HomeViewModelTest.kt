@@ -105,7 +105,19 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `ItemClicked while loading is ignored`() = runTest {
+    fun `ItemClicked does not reload Home`() = runTest {
+        coEvery { repository.getHome() } returns Result.success(fakeResponse("all_movies"))
+
+        val vm = HomeViewModel(repository)
+        advanceUntilIdle()
+        vm.onIntent(HomeIntent.ItemClicked("all_movies/tmdb:movie:1"))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.getHome() }
+    }
+
+    @Test
+    fun `ItemClicked on the error screen keeps Error`() = runTest {
         coEvery { repository.getHome() } returns Result.failure(RuntimeException("fail"))
 
         val vm = HomeViewModel(repository)
