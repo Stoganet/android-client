@@ -12,134 +12,133 @@ import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.ResumeInfo
 import com.stoganet.core.api.model.Season
 import com.stoganet.core.data.detail.DetailRepository
-import com.stoganet.core.data.playback.PlaybackRepository
 import com.stoganet.core.data.playback.resumePositionMs
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
 import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 
+private const val STOP_TIMEOUT_MS = 5_000L
+
+private data class SeasonEpisodes(val season: Int?, val episodes: ImmutableList<EpisodeUiState>)
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class DetailViewModel(
     private val id: String,
     private val repository: DetailRepository,
     private val searchRepository: SearchRepository,
-    playbackRepository: PlaybackRepository,
     private val userMessageCenter: UserMessageCenter,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
-    val state: StateFlow<DetailUiState> = _state.asStateFlow()
+    private val retries = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
-    init {
-        loadDetail()
-        val visible = _state.subscriptionCount.map { it > 0 }.distinctUntilChanged()
-        viewModelScope.launch {
-            combine(visible, playbackRepository.lastProgress.drop(1)) { isVisible, progress ->
-                progress.takeIf { isVisible }
-            }
-                .filterNotNull()
-                .distinctUntilChanged()
-                .collectLatest { refreshDetail() }
-        }
-    }
+    private val seasonPicks = MutableSharedFlow<Int>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private var shownEpisodes = SeasonEpisodes(season = null, episodes = persistentListOf())
+
+    private val requested = MutableStateFlow(false)
+
+    private val detail: Flow<DetailUiState> = retries
+        .map { true }
+        .onStart { emit(false) }
+        .flatMapLatest { isRetry -> loadDetail(showLoading = isRetry) }
+
+    private val episodes: Flow<SeasonEpisodes> = seasonPicks
+        .flatMapLatest { season -> loadEpisodes(season, previous = shownEpisodes) }
+        .onStart { emit(shownEpisodes) }
+        .onEach { shownEpisodes = it }
+
+    val state: StateFlow<DetailUiState> = combine(detail, episodes, requested) { detail, episodes, requested ->
+        if (detail !is DetailUiState.Content) return@combine detail
+        detail.copy(
+            selectedSeason = episodes.season,
+            episodes = episodes.episodes,
+            mediaState = if (requested && detail.mediaState == MediaState.REQUESTABLE) {
+                MediaState.DOWNLOADING
+            } else {
+                detail.mediaState
+            },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), DetailUiState.Loading)
 
     fun onIntent(intent: DetailIntent) {
         when (intent) {
-            DetailIntent.Retry -> {
-                if (_state.value is DetailUiState.Loading) return
-                loadDetail()
-            }
-
+            DetailIntent.Retry -> if (state.value !is DetailUiState.Loading) retries.tryEmit(Unit)
             is DetailIntent.SelectSeason -> selectSeason(intent.seasonNumber)
-
             DetailIntent.RequestMovie -> requestMovie()
         }
     }
 
+    private fun selectSeason(seasonNumber: Int) {
+        if (seasonNumber != shownEpisodes.season) seasonPicks.tryEmit(seasonNumber)
+    }
+
     private fun requestMovie() {
-        val current = _state.value
+        val current = state.value
         if (current !is DetailUiState.Content || current.mediaState != MediaState.REQUESTABLE) return
-        _state.update { (it as DetailUiState.Content).copy(mediaState = MediaState.DOWNLOADING) }
+        requested.value = true
         viewModelScope.launch {
             searchRepository.requestMovie(id).onFailure {
-                _state.update { state ->
-                    if (state is DetailUiState.Content) {
-                        state.copy(mediaState = MediaState.REQUESTABLE)
-                    } else {
-                        state
-                    }
-                }
+                requested.value = false
                 userMessageCenter.show(R.string.detail_request_failed_message)
             }
         }
     }
 
-    private fun loadDetail() {
-        _state.update { DetailUiState.Loading }
-        viewModelScope.launch {
-            repository.getDetail(id)
-                .onSuccess { detail -> _state.update { detail.toUiState() } }
-                .onFailure { _state.update { DetailUiState.Error } }
+    private fun loadDetail(showLoading: Boolean): Flow<DetailUiState> = flow {
+        if (showLoading) emit(DetailUiState.Loading)
+        var loaded = false
+        repository.detail(id).collect { result ->
+            result
+                .onSuccess {
+                    loaded = true
+                    emit(it.toUiState())
+                }
+                .onFailure { if (!loaded) emit(DetailUiState.Error) }
         }
     }
 
-    private suspend fun refreshDetail() {
-        val season = (_state.value as? DetailUiState.Content)?.selectedSeason
-        val detail = repository.getDetail(id).getOrNull() ?: return
-        val episodes = season?.let { repository.getEpisodes(id, it).getOrNull() }
-        _state.update { state ->
-            val current = state as? DetailUiState.Content ?: return@update state
-            val refreshedEpisodes = episodes
-                ?.takeIf { current.selectedSeason == season }
-                ?.map { it.toUiState() }
-                ?.toImmutableList()
-            detail.toUiState().copy(
-                selectedSeason = current.selectedSeason,
-                episodes = refreshedEpisodes ?: current.episodes,
-            )
-        }
-    }
-
-    private fun selectSeason(seasonNumber: Int) {
-        val current = _state.value as? DetailUiState.Content ?: return
-        if (current.selectedSeason == seasonNumber) return
-        val previousSeason = current.selectedSeason
-        _state.update {
-            (it as DetailUiState.Content).copy(
-                selectedSeason = seasonNumber,
-                episodes = persistentListOf(),
-            )
-        }
-        viewModelScope.launch {
-            repository.getEpisodes(id, seasonNumber)
-                .onSuccess { episodes ->
-                    _state.update { state ->
-                        val s = state as? DetailUiState.Content ?: return@update state
-                        if (s.selectedSeason != seasonNumber) return@update state
-                        s.copy(episodes = episodes.map { it.toUiState() }.toImmutableList())
-                    }
-                }
-                .onFailure {
-                    _state.update { state ->
-                        val s = state as? DetailUiState.Content ?: return@update state
-                        if (s.selectedSeason != seasonNumber) return@update state
-                        s.copy(selectedSeason = previousSeason, episodes = persistentListOf())
-                    }
-                }
-        }
+    private fun loadEpisodes(season: Int, previous: SeasonEpisodes): Flow<SeasonEpisodes> = flow {
+        // The same season again means the pipeline restarted, so its list stays until the new one arrives
+        var loaded = season == previous.season
+        if (!loaded) emit(SeasonEpisodes(season, persistentListOf()))
+        emitAll(
+            repository.episodes(id, season).transformWhile { result ->
+                result.fold(
+                    onSuccess = { list ->
+                        loaded = true
+                        emit(SeasonEpisodes(season, list.map { it.toUiState() }.toImmutableList()))
+                        true
+                    },
+                    onFailure = {
+                        if (!loaded) emit(SeasonEpisodes(previous.season, persistentListOf()))
+                        loaded
+                    },
+                )
+            },
+        )
     }
 
     private fun LibraryDetail.toUiState() = DetailUiState.Content(
@@ -179,7 +178,6 @@ class DetailViewModel(
                     id = id,
                     repository = app.services.detailRepository,
                     searchRepository = app.services.searchRepository,
-                    playbackRepository = app.services.playbackRepository,
                     userMessageCenter = app.services.userMessageCenter,
                 )
             }
