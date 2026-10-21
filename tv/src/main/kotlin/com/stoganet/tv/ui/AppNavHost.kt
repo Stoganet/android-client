@@ -47,6 +47,8 @@ import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
 import com.stoganet.tv.ui.detail.DetailScreen
 import com.stoganet.tv.ui.detail.DetailViewModel
+import com.stoganet.tv.ui.episode.EpisodeScreen
+import com.stoganet.tv.ui.episode.EpisodeViewModel
 import com.stoganet.tv.ui.home.HomeScreen
 import com.stoganet.tv.ui.home.HomeViewModel
 import com.stoganet.tv.ui.library.LibraryScreen
@@ -149,6 +151,19 @@ fun AppNavHost() {
                 onNavigateToPlayer = { playId, positionMs ->
                     navController.navigate(AppRoutes.player(playId, positionMs))
                 },
+            )
+        }
+        composable(AppRoutes.EPISODE) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id") ?: return@composable
+            val vm: EpisodeViewModel = viewModel(factory = EpisodeViewModel.factory(id))
+            val state by vm.state.collectAsStateWithLifecycle()
+            EpisodeScreen(
+                state = state,
+                onIntent = vm::onIntent,
+                onNavigateToPlayer = { playId, positionMs ->
+                    navController.navigate(AppRoutes.player(playId, positionMs))
+                },
+                onNavigateToEpisode = { nextId -> navController.navigate(AppRoutes.episode(nextId)) },
             )
         }
         composable(

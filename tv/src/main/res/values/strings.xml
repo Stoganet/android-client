@@ -70,4 +70,10 @@
     <string name="detail_episodes_label">Episodes</string>
     <string name="detail_episode_content_description">Play episode %1$d: %2$s</string>
     <string name="detail_episode_runtime">%1$d min</string>
+    <string name="episode_error_message">Couldn\'t load this episode. Please try again.</string>
+    <string name="episode_watched_label">Watched</string>
+    <string name="episode_play_from_start_content_description">Play %1$s from the beginning</string>
+    <string name="episode_next_content_description">Go to the next episode</string>
+    <string name="episode_season_episode">S%1$d · E%2$d</string>
+    <string name="episode_meta">%1$s · %2$s</string>
 </resources>

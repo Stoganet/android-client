@@ -105,19 +105,7 @@ private fun DetailContent(
 
     Box(modifier = modifier.fillMaxSize()) {
         DetailBackdrop(backdropUrl = state.backdropUrl)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color.Black.copy(alpha = GRADIENT_START_ALPHA),
-                            GRADIENT_MID_STOP to Color.Black.copy(alpha = GRADIENT_MID_ALPHA),
-                            1.0f to Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
+        DetailScrim()
         DetailMetadataPanel(
             state = state,
             focusRequester = focusRequester,
@@ -128,7 +116,24 @@ private fun DetailContent(
 }
 
 @Composable
-private fun DetailBackdrop(backdropUrl: String?) {
+internal fun DetailScrim() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0.0f to Color.Black.copy(alpha = GRADIENT_START_ALPHA),
+                        GRADIENT_MID_STOP to Color.Black.copy(alpha = GRADIENT_MID_ALPHA),
+                        1.0f to Color.Transparent,
+                    ),
+                ),
+            ),
+    )
+}
+
+@Composable
+internal fun DetailBackdrop(backdropUrl: String?) {
     if (backdropUrl != null) {
         AsyncImage(
             model = backdropUrl,
@@ -393,7 +398,7 @@ private fun DetailActionButton(
 }
 
 @Composable
-private fun CastSection(cast: ImmutableList<CastMemberUiState>) {
+internal fun CastSection(cast: ImmutableList<CastMemberUiState>) {
     Column {
         Spacer(Modifier.height(32.dp))
         Text(

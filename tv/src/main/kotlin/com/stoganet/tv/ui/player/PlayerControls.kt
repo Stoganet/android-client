@@ -41,6 +41,7 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.stoganet.core.data.playback.progressFraction
 import com.stoganet.tv.R
 import java.util.Locale
 import kotlin.time.Duration.Companion.hours
@@ -155,7 +156,7 @@ private fun PlayerSeekBar(
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     val trackHeight by animateDpAsState(if (focused) 8.dp else 4.dp, label = "trackHeight")
-    val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    val progress = progressFraction(positionMs, durationMs)
     val withHours = durationMs.milliseconds >= 1.hours
 
     Column(modifier = modifier) {

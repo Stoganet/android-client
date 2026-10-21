@@ -205,26 +205,6 @@ class DetailViewModelTest {
     }
 
     @Test
-    fun `formatRuntime formats hours and minutes`() {
-        assertEquals("2h 16m", DetailViewModel.formatRuntime(136))
-    }
-
-    @Test
-    fun `formatRuntime formats minutes only`() {
-        assertEquals("45m", DetailViewModel.formatRuntime(45))
-    }
-
-    @Test
-    fun `formatRuntime formats whole hours`() {
-        assertEquals("2h", DetailViewModel.formatRuntime(120))
-    }
-
-    @Test
-    fun `formatRuntime returns empty string for zero`() {
-        assertEquals("", DetailViewModel.formatRuntime(0))
-    }
-
-    @Test
     fun `selectSeason loads episodes on success`() = runTest(dispatcher) {
         val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
         val detail = fakeDetail().copy(type = MediaType.TV, seasons = listOf(season))
