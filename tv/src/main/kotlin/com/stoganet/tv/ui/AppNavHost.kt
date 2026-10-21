@@ -151,6 +151,7 @@ fun AppNavHost() {
                 onNavigateToPlayer = { playId, positionMs ->
                     navController.navigate(AppRoutes.player(playId, positionMs))
                 },
+                onNavigateToEpisode = { episodeId -> navController.navigate(AppRoutes.episode(episodeId)) },
             )
         }
         composable(AppRoutes.EPISODE) { backStackEntry ->

@@ -42,6 +42,7 @@ import coil3.compose.AsyncImage
 import com.stoganet.core.api.model.MediaState
 import com.stoganet.core.api.model.MediaType
 import com.stoganet.tv.R
+import com.stoganet.tv.ui.IconActionButton
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -56,6 +57,7 @@ fun DetailScreen(
     state: DetailUiState,
     onIntent: (DetailIntent) -> Unit,
     onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
+    onNavigateToEpisode: (id: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -88,6 +90,7 @@ fun DetailScreen(
             state = state,
             onIntent = onIntent,
             onNavigateToPlayer = onNavigateToPlayer,
+            onNavigateToEpisode = onNavigateToEpisode,
             modifier = modifier,
         )
     }
@@ -98,6 +101,7 @@ private fun DetailContent(
     state: DetailUiState.Content,
     onIntent: (DetailIntent) -> Unit,
     onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
+    onNavigateToEpisode: (id: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -111,6 +115,7 @@ private fun DetailContent(
             focusRequester = focusRequester,
             onIntent = onIntent,
             onNavigateToPlayer = onNavigateToPlayer,
+            onNavigateToEpisode = onNavigateToEpisode,
         )
     }
 }
@@ -157,6 +162,7 @@ private fun DetailMetadataPanel(
     focusRequester: FocusRequester,
     onIntent: (DetailIntent) -> Unit,
     onNavigateToPlayer: (id: String, positionMs: Long) -> Unit,
+    onNavigateToEpisode: (id: String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -225,7 +231,7 @@ private fun DetailMetadataPanel(
 
         if (state.mediaType == MediaType.TV && state.episodes.isNotEmpty()) {
             items(state.episodes) { episode ->
-                EpisodeRow(episode = episode, onNavigateToPlayer = onNavigateToPlayer)
+                EpisodeRow(episode = episode, onOpen = { onNavigateToEpisode(episode.id) })
             }
         }
 
@@ -254,16 +260,12 @@ private fun TvActions(
             } else {
                 stringResource(R.string.detail_play_content_description, target.title)
             }
-            Button(
-                onClick = {
-                    onNavigateToPlayer(target.episodeId, target.positionMs)
-                },
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .semantics { contentDescription = resumeDesc },
-            ) {
-                Text(stringResource(if (isResume) R.string.detail_resume_button else R.string.detail_play_button))
-            }
+            IconActionButton(
+                iconRes = R.drawable.ic_play,
+                label = resumeDesc,
+                onClick = { onNavigateToPlayer(target.episodeId, target.positionMs) },
+                modifier = Modifier.focusRequester(focusRequester),
+            )
             Spacer(Modifier.height(16.dp))
         }
 
@@ -312,11 +314,10 @@ private fun SeasonChips(
 }
 
 @Composable
-private fun EpisodeRow(episode: EpisodeUiState, onNavigateToPlayer: (id: String, positionMs: Long) -> Unit) {
-    val desc = stringResource(R.string.detail_episode_content_description, episode.number, episode.title)
+private fun EpisodeRow(episode: EpisodeUiState, onOpen: () -> Unit) {
+    val desc = stringResource(R.string.detail_episode_open_content_description, episode.number, episode.title)
     Button(
-        onClick = { onNavigateToPlayer(episode.id, episode.positionMs) },
-        enabled = episode.isPlayable,
+        onClick = onOpen,
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = desc },
@@ -352,22 +353,27 @@ private fun DetailActionButton(
     onNavigateToPlayer: () -> Unit,
     onRequestMovie: () -> Unit,
 ) {
+    if (mediaState == MediaState.PLAYABLE && isPlayable) {
+        val descRes = if (positionMs > 0) {
+            R.string.detail_resume_content_description
+        } else {
+            R.string.detail_play_content_description
+        }
+        val desc = stringResource(descRes, title)
+        IconActionButton(
+            iconRes = R.drawable.ic_play,
+            label = desc,
+            onClick = onNavigateToPlayer,
+            modifier = Modifier.focusRequester(focusRequester),
+        )
+        return
+    }
     val label: String
     val desc: String
     val enabled: Boolean
     val onClick: () -> Unit
     when (mediaState) {
-        MediaState.PLAYABLE -> if (isPlayable) {
-            if (positionMs > 0) {
-                label = stringResource(R.string.detail_resume_button)
-                desc = stringResource(R.string.detail_resume_content_description, title)
-            } else {
-                label = stringResource(R.string.detail_play_button)
-                desc = stringResource(R.string.detail_play_content_description, title)
-            }
-            enabled = true
-            onClick = onNavigateToPlayer
-        } else {
+        MediaState.PLAYABLE -> {
             label = stringResource(R.string.detail_not_available_button)
             desc = stringResource(R.string.detail_not_available_content_description, title)
             enabled = false
@@ -432,13 +438,18 @@ internal fun CastSection(cast: ImmutableList<CastMemberUiState>) {
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewLoading() {
-    DetailScreen(state = DetailUiState.Loading, onIntent = {}, onNavigateToPlayer = { _, _ -> })
+    DetailScreen(
+        state = DetailUiState.Loading,
+        onIntent = {},
+        onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
+    )
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
 @Composable
 private fun PreviewError() {
-    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _ -> })
+    DetailScreen(state = DetailUiState.Error, onIntent = {}, onNavigateToPlayer = { _, _ -> }, onNavigateToEpisode = {})
 }
 
 @Preview(showBackground = true, widthDp = 1280, heightDp = 720)
@@ -465,6 +476,7 @@ private fun PreviewMovieContent() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }
 
@@ -498,6 +510,7 @@ private fun PreviewTvWithSeasons() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }
 
@@ -523,14 +536,20 @@ private fun PreviewTvWithEpisodes() {
             selectedSeason = 1,
             episodes = persistentListOf(
                 EpisodeUiState(
-                    id = "ep1", number = 1, title = "Pilot",
-                    overview = "A teacher turns to crime.", runtimeMinutes = 58,
-                    thumbnailUrl = null, isPlayable = true, positionMs = 0L, played = false,
+                    id = "ep1",
+                    number = 1,
+                    title = "Pilot",
+                    overview = "A teacher turns to crime.",
+                    runtimeMinutes = 58,
+                    thumbnailUrl = null,
                 ),
                 EpisodeUiState(
-                    id = "ep2", number = 2, title = "Cat's in the Bag",
-                    overview = null, runtimeMinutes = 48,
-                    thumbnailUrl = null, isPlayable = true, positionMs = 0L, played = false,
+                    id = "ep2",
+                    number = 2,
+                    title = "Cat's in the Bag",
+                    overview = null,
+                    runtimeMinutes = 48,
+                    thumbnailUrl = null,
                 ),
             ),
             isPlayable = false,
@@ -538,6 +557,7 @@ private fun PreviewTvWithEpisodes() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }
 
@@ -562,6 +582,7 @@ private fun PreviewNotPlayable() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }
 
@@ -586,6 +607,7 @@ private fun PreviewRequestable() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }
 
@@ -610,5 +632,6 @@ private fun PreviewDownloading() {
         ),
         onIntent = {},
         onNavigateToPlayer = { _, _ -> },
+        onNavigateToEpisode = {},
     )
 }

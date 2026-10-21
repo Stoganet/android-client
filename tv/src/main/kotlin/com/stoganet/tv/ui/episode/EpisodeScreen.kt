@@ -1,6 +1,5 @@
 package com.stoganet.tv.ui.episode
 
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,7 +30,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,13 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
-import androidx.tv.material3.Icon
-import androidx.tv.material3.IconButton
-import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.stoganet.tv.R
+import com.stoganet.tv.ui.IconActionButton
 import com.stoganet.tv.ui.detail.CastMemberUiState
 import com.stoganet.tv.ui.detail.CastSection
 import com.stoganet.tv.ui.detail.DetailBackdrop
@@ -306,7 +301,7 @@ private fun EpisodeActions(
                 if (isResume) R.string.detail_resume_content_description else R.string.detail_play_content_description,
                 state.title,
             )
-            EpisodeIconButton(
+            IconActionButton(
                 iconRes = R.drawable.ic_play,
                 label = desc,
                 onClick = onPlay,
@@ -314,7 +309,7 @@ private fun EpisodeActions(
             )
         }
         if (showFromStart) {
-            EpisodeIconButton(
+            IconActionButton(
                 iconRes = R.drawable.ic_replay,
                 label = stringResource(R.string.episode_play_from_start_content_description, state.title),
                 onClick = onPlayFromStart,
@@ -322,30 +317,13 @@ private fun EpisodeActions(
             )
         }
         if (state.nextEpisodeId != null) {
-            EpisodeIconButton(
+            IconActionButton(
                 iconRes = R.drawable.ic_skip_next,
                 label = stringResource(R.string.episode_next_content_description),
                 onClick = { onNext(state.nextEpisodeId) },
                 modifier = Modifier.focusRequester(nextRequester),
             )
         }
-    }
-}
-
-@Composable
-private fun EpisodeIconButton(
-    @DrawableRes iconRes: Int,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier
-            .size(IconButtonDefaults.MediumButtonSize)
-            .semantics { contentDescription = label },
-    ) {
-        Icon(painter = painterResource(iconRes), contentDescription = null)
     }
 }
 

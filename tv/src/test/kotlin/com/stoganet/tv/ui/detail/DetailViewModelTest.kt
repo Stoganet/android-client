@@ -92,13 +92,12 @@ class DetailViewModelTest {
         play = play,
     )
 
-    private fun pilot(progress: WatchProgress? = null) = Episode(
+    private fun pilot() = Episode(
         id = "ep1",
         number = 1,
         seasonNumber = 1,
         title = "Pilot",
         state = MediaState.PLAYABLE,
-        progress = progress,
     )
 
     // Detail's UI collects state only while the screen is visible
@@ -222,33 +221,6 @@ class DetailViewModelTest {
     }
 
     @Test
-    fun `episodes are playable only with play info`() = runTest(dispatcher) {
-        val season = Season(number = 1, name = "Season 1", episodeCount = 2, poster = "")
-        val detail = fakeDetail().copy(type = MediaType.TV, seasons = listOf(season))
-        coEvery { repository.getDetail(any()) } returns Result.success(detail)
-        val play = PlayInfo(streamUrl = "https://api.stoganet.com/stream/ep1", subtitleTracks = emptyList())
-        coEvery { repository.getEpisodes(any(), 1) } returns Result.success(
-            listOf(
-                Episode(
-                    id = "ep1",
-                    number = 1,
-                    seasonNumber = 1,
-                    title = "Pilot",
-                    state = MediaState.PLAYABLE,
-                    play = play,
-                ),
-                Episode(id = "ep2", number = 2, seasonNumber = 1, title = "Second", state = MediaState.DOWNLOADING),
-            ),
-        )
-
-        val vm = openDetail()
-        vm.onIntent(DetailIntent.SelectSeason(1))
-
-        val episodes = (vm.state.value as DetailUiState.Content).episodes
-        assertEquals(listOf(true, false), episodes.map { it.isPlayable })
-    }
-
-    @Test
     fun `progress saved while shown refreshes detail`() = runTest(dispatcher) {
         coEvery { repository.getDetail(any()) } returns Result.success(fakeDetail())
         openDetail()
@@ -326,14 +298,9 @@ class DetailViewModelTest {
         val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
         coEvery { repository.getDetail(any()) } returns
             Result.success(fakeDetail().copy(type = MediaType.TV, seasons = listOf(season)))
-        val watched = WatchProgress(positionMs = 60_000L, played = false)
         coEvery { repository.getEpisodes(any(), 1) } returnsMany listOf(
-            Result.success(
-                listOf(pilot()),
-            ),
-            Result.success(
-                listOf(pilot(progress = watched)),
-            ),
+            Result.success(listOf(pilot())),
+            Result.success(listOf(pilot().copy(title = "Pilot Reloaded"))),
         )
         val vm = openDetail()
         vm.onIntent(DetailIntent.SelectSeason(1))
@@ -342,7 +309,7 @@ class DetailViewModelTest {
 
         val state = vm.state.value as DetailUiState.Content
         assertEquals(1, state.selectedSeason)
-        assertEquals(60_000L, state.episodes.single().positionMs)
+        assertEquals("Pilot Reloaded", state.episodes.single().title)
     }
 
     @Test
@@ -356,22 +323,6 @@ class DetailViewModelTest {
         progressSaved.emit(Unit)
 
         assertEquals("Test Movie", (vm.state.value as DetailUiState.Content).title)
-    }
-
-    @Test
-    fun `a watched episode plays from the beginning`() = runTest(dispatcher) {
-        val season = Season(number = 1, name = "Season 1", episodeCount = 1, poster = "")
-        coEvery { repository.getDetail(any()) } returns
-            Result.success(fakeDetail().copy(type = MediaType.TV, seasons = listOf(season)))
-        coEvery { repository.getEpisodes(any(), 1) } returns
-            Result.success(listOf(pilot(progress = WatchProgress(positionMs = 2_400_000L, played = true))))
-
-        val vm = openDetail()
-        vm.onIntent(DetailIntent.SelectSeason(1))
-
-        val episode = (vm.state.value as DetailUiState.Content).episodes.single()
-        assertEquals(0L, episode.positionMs)
-        assertTrue(episode.played)
     }
 
     @Test

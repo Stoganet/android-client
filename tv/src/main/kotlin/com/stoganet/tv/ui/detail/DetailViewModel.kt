@@ -190,9 +190,6 @@ private fun Episode.toUiState() = EpisodeUiState(
     overview = overview,
     runtimeMinutes = runtime,
     thumbnailUrl = thumbnail,
-    isPlayable = play != null,
-    positionMs = progress.resumePositionMs(),
-    played = progress?.played ?: false,
 )
 
 private fun ResumeInfo.toUiState() = ResumeUiState(

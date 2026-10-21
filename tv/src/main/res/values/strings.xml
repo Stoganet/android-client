@@ -36,7 +36,6 @@
     <string name="library_error_message">Could not load library. Please try again.</string>
     <string name="library_load_more_error">Couldn\'t load more items.</string>
     <string name="detail_error_message">Couldn\'t load details. Please try again.</string>
-    <string name="detail_play_button">Play</string>
     <string name="detail_not_available_button">Not available</string>
     <string name="detail_cast_label">Cast</string>
     <string name="detail_play_content_description">Play %1$s</string>
@@ -64,11 +63,10 @@
         <item quantity="one">%d Season</item>
         <item quantity="other">%d Seasons</item>
     </plurals>
-    <string name="detail_resume_button">Resume</string>
     <string name="detail_resume_content_description">Resume %1$s</string>
     <string name="detail_season_chip_content_description">Season %1$d</string>
     <string name="detail_episodes_label">Episodes</string>
-    <string name="detail_episode_content_description">Play episode %1$d: %2$s</string>
+    <string name="detail_episode_open_content_description">Open episode %1$d: %2$s</string>
     <string name="detail_episode_runtime">%1$d min</string>
     <string name="episode_error_message">Couldn\'t load this episode. Please try again.</string>
     <string name="episode_watched_label">Watched</string>
