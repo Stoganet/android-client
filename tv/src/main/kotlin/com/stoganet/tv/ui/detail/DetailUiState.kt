@@ -35,9 +35,6 @@ data class EpisodeUiState(
     val overview: String?,
     val runtimeMinutes: Int?,
     val thumbnailUrl: String?,
-    val isPlayable: Boolean,
-    val positionMs: Long,
-    val played: Boolean,
 )
 
 sealed interface DetailUiState {

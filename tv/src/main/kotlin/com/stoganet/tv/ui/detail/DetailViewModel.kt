@@ -15,6 +15,7 @@ import com.stoganet.core.data.detail.DetailRepository
 import com.stoganet.core.data.playback.resumePositionMs
 import com.stoganet.core.data.search.SearchRepository
 import com.stoganet.core.util.UserMessageCenter
+import com.stoganet.core.util.formatRuntime
 import com.stoganet.tv.R
 import com.stoganet.tv.StoganetApp
 import kotlinx.collections.immutable.ImmutableList
@@ -160,17 +161,6 @@ class DetailViewModel(
     )
 
     companion object {
-        fun formatRuntime(minutes: Int): String {
-            if (minutes <= 0) return ""
-            val h = minutes / 60
-            val m = minutes % 60
-            return when {
-                h == 0 -> "${m}m"
-                m == 0 -> "${h}h"
-                else -> "${h}h ${m}m"
-            }
-        }
-
         fun factory(id: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as StoganetApp
@@ -200,9 +190,6 @@ private fun Episode.toUiState() = EpisodeUiState(
     overview = overview,
     runtimeMinutes = runtime,
     thumbnailUrl = thumbnail,
-    isPlayable = play != null,
-    positionMs = progress.resumePositionMs(),
-    played = progress?.played ?: false,
 )
 
 private fun ResumeInfo.toUiState() = ResumeUiState(
